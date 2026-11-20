@@ -94,11 +94,35 @@ interface AppSidebarProps {
   permissions: readonly string[];
 }
 
-function isNavItemActive(pathname: string, href: string): boolean {
+function isNavItemActive(
+  pathname: string,
+  href: string,
+  allHrefs: string[] = []
+): boolean {
   if (href === "/") {
     return pathname === "/";
   }
-  return pathname === href || pathname.startsWith(`${href}/`);
+  if (pathname === href) {
+    return true;
+  }
+  if (pathname.startsWith(`${href}/`)) {
+    // If another nav item has an exact match with pathname, that exact match wins!
+    const hasExactMatchOther = allHrefs.some(
+      (other) => other !== href && other === pathname
+    );
+    if (hasExactMatchOther) {
+      return false;
+    }
+    // If another nav item is a more specific (longer) prefix match, that longer item wins!
+    const hasLongerPrefix = allHrefs.some(
+      (other) =>
+        other !== href &&
+        other.length > href.length &&
+        (pathname === other || pathname.startsWith(`${other}/`))
+    );
+    return !hasLongerPrefix;
+  }
+  return false;
 }
 
 function formatGroupLabel(label: string): string {
@@ -141,6 +165,11 @@ function SidebarNavContent({
   onSelectHref: (href: string) => void;
   onNavigate?: () => void;
 }) {
+  const allHrefs = useMemo(
+    () => groups.flatMap((group) => group.items.map((item) => item.href)),
+    [groups]
+  );
+
   return (
     <nav
       aria-label="Navigasi utama Krevia Studio"
@@ -162,7 +191,7 @@ function SidebarNavContent({
           <ul className="space-y-0.5">
             {group.items.map((item) => {
               const Icon = NAV_ICON_MAP[item.icon];
-              const active = isNavItemActive(pathname, item.href);
+              const active = isNavItemActive(pathname, item.href, allHrefs);
               const isPending = pendingHref === item.href;
 
               const linkElement = (
