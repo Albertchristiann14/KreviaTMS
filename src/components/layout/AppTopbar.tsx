@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { useUnreadNotifications } from "@/features/system/hooks/useUnreadNotifications";
 import {
   getVisibleNavGroups,
@@ -105,13 +106,13 @@ const PARENT_ROUTE_MAP: Record<string, string> = {
 
 function buildBreadcrumbs(
   pathname: string
-): Array<{ label: string; href: string }> {
+): Array<{ label: string; href: string; key: string }> {
   if (pathname === "/") {
-    return [{ label: "Overview", href: "/" }];
+    return [{ label: "Overview", href: "/", key: "root" }];
   }
 
   const segments = pathname.split("/").filter(Boolean);
-  const crumbs: Array<{ label: string; href: string }> = [];
+  const crumbs: Array<{ label: string; href: string; key: string }> = [];
   let acc = "";
 
   for (let i = 0; i < segments.length; i++) {
@@ -133,7 +134,7 @@ function buildBreadcrumbs(
     }
 
     const resolvedHref = PARENT_ROUTE_MAP[acc] || acc;
-    crumbs.push({ label, href: resolvedHref });
+    crumbs.push({ label, href: resolvedHref, key: `${acc}-${i}` });
   }
 
   return crumbs;
@@ -274,16 +275,23 @@ export function AppTopbar({ user, permissions }: AppTopbarProps) {
             </Link>
             {breadcrumbs.map((crumb, idx) => {
               const isLast = idx === breadcrumbs.length - 1;
+              const isCurrentPage = crumb.href === pathname;
               return (
-                <Fragment key={crumb.href}>
+                <Fragment key={crumb.key}>
                   <span
                     className="hidden text-xs font-medium text-slate-300 select-none dark:text-slate-600 sm:inline"
                     aria-hidden="true"
                   >
                     /
                   </span>
-                  {isLast ? (
-                    <span className="truncate text-sm font-bold tracking-tight text-slate-900 dark:text-white">
+                  {isLast || isCurrentPage ? (
+                    <span
+                      className={cn(
+                        "truncate text-xs font-semibold text-slate-600 dark:text-slate-300 sm:inline",
+                        isLast &&
+                          "text-sm font-bold tracking-tight text-slate-900 dark:text-white"
+                      )}
+                    >
                       {crumb.label}
                     </span>
                   ) : (
