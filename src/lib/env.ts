@@ -61,6 +61,16 @@ function isValidationSkipped(): boolean {
 export function getServerEnv(): ServerEnv {
   if (cachedServerEnv) return cachedServerEnv;
 
+  // Auto-fallback for Vercel + Supabase integration naming
+  if (!process.env.DATABASE_URL && process.env.POSTGRES_PRISMA_URL) {
+    process.env.DATABASE_URL = process.env.POSTGRES_PRISMA_URL;
+  } else if (!process.env.DATABASE_URL && process.env.POSTGRES_URL) {
+    process.env.DATABASE_URL = process.env.POSTGRES_URL;
+  }
+  if (!process.env.DIRECT_URL && process.env.POSTGRES_URL_NON_POOLING) {
+    process.env.DIRECT_URL = process.env.POSTGRES_URL_NON_POOLING;
+  }
+
   if (isValidationSkipped()) {
     cachedServerEnv = {
       NODE_ENV:
@@ -112,11 +122,14 @@ export function getServerEnv(): ServerEnv {
 export function getPublicEnv(): PublicEnv {
   if (cachedPublicEnv) return cachedPublicEnv;
 
+  // Auto-fallback for Supabase URL from integration
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+
   const raw = {
     NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_ENABLE_DEMO_HINTS: process.env.NEXT_PUBLIC_ENABLE_DEMO_HINTS,
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
   };
 
   if (isValidationSkipped()) {
