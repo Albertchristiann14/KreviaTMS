@@ -2,6 +2,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  async redirects() {
+    return [
+      { source: "/tasks", destination: "/tasks/board", permanent: false },
+      { source: "/content", destination: "/content/ideas", permanent: false },
+      { source: "/kpi", destination: "/kpi/dashboard", permanent: false },
+      { source: "/system", destination: "/system/users", permanent: false },
+      { source: "/design", destination: "/design/workspace", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

@@ -95,6 +95,14 @@ const DYNAMIC_SEGMENT_LABELS: Record<string, string> = {
   evaluations: "Detail Evaluasi",
 };
 
+const PARENT_ROUTE_MAP: Record<string, string> = {
+  "/tasks": "/tasks/board",
+  "/content": "/content/ideas",
+  "/kpi": "/kpi/dashboard",
+  "/system": "/system/users",
+  "/design": "/design/workspace",
+};
+
 function buildBreadcrumbs(
   pathname: string
 ): Array<{ label: string; href: string }> {
@@ -124,7 +132,8 @@ function buildBreadcrumbs(
       }
     }
 
-    crumbs.push({ label, href: acc });
+    const resolvedHref = PARENT_ROUTE_MAP[acc] || acc;
+    crumbs.push({ label, href: resolvedHref });
   }
 
   return crumbs;
