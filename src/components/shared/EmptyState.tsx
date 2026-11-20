@@ -33,7 +33,7 @@ export function EmptyState({
       {description ? (
         <p
           title={description}
-          className="mt-1 line-clamp-1 max-w-md text-xs text-muted-foreground/85"
+          className="mt-1 max-w-md text-xs leading-relaxed text-muted-foreground/85 break-words"
         >
           {description}
         </p>

@@ -411,11 +411,11 @@ export function AppSidebar({ user, permissions }: AppSidebarProps) {
                     onClick={toggleSidebar}
                     aria-label="Perlebar sidebar"
                     className="size-8 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white dark:hover:bg-slate-800"
-                  />
+                  >
+                    <PanelLeftOpen className="size-4" />
+                  </Button>
                 }
-              >
-                <PanelLeftOpen className="size-4" />
-              </TooltipTrigger>
+              />
               <TooltipContent
                 side="right"
                 sideOffset={8}
