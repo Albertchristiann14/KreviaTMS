@@ -644,7 +644,7 @@ export function IndividualMetricsHeader({
                               variant="outline"
                               className="font-mono text-[10px]"
                             >
-                              {t.projectCode}
+                              {t.projectCode || "Tanpa Proyek"}
                             </Badge>
                           </TableCell>
                           <TableCell>

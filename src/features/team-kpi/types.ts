@@ -29,7 +29,7 @@ export interface TaskBreakdownItem {
   taskId: string;
   taskCode: string;
   title: string;
-  projectId: string;
+  projectId: string | null;
   projectName: string;
   projectCode: string;
   taskType: string;

@@ -11,8 +11,10 @@ import {
   Lock,
   Plus,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import {
   createDataTableColumnHelper,
   DataTable,
@@ -38,7 +40,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { generateMonthlyEvaluationAction } from "@/features/team-kpi/actions/evaluation.actions";
+import {
+  deleteDraftEvaluationAction,
+  generateMonthlyEvaluationAction,
+} from "@/features/team-kpi/actions/evaluation.actions";
 import type { EvaluationsListPageData } from "@/features/team-kpi/queries/kpi.queries";
 import type {
   EvaluationListRowDTO,
@@ -87,6 +92,8 @@ export function EvaluationsDirectoryClient({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] =
+    useState<EvaluationListRowDTO | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
 
   const readyToGenerateCandidates = useMemo(
@@ -173,6 +180,24 @@ export function EvaluationsDirectoryClient({
 
       toast.success(res.message ?? "Draft evaluasi berhasil dibuat.");
       setGenerateDialogOpen(false);
+      router.refresh();
+    });
+  };
+
+  const handleConfirmDeleteDraft = () => {
+    if (!deleteTarget) return;
+    startTransition(async () => {
+      const res = await deleteDraftEvaluationAction({
+        evaluationId: deleteTarget.id,
+      });
+
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+
+      toast.success(res.message ?? "Draft evaluasi berhasil dihapus.");
+      setDeleteTarget(null);
       router.refresh();
     });
   };
@@ -307,8 +332,30 @@ export function EvaluationsDirectoryClient({
           if (row.isMaskedForEmployee) {
             return null;
           }
+          const canDeleteRow =
+            data.canDeleteDraft &&
+            row.status === "DRAFT" &&
+            (data.isSuperAdmin ||
+              (row.userRole !== "PROJECT_MANAGER" &&
+                row.userRole !== "SUPER_ADMIN"));
           return (
-            <div className="flex justify-end">
+            <div className="flex items-center justify-end gap-1.5">
+              {canDeleteRow ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  disabled={isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget(row);
+                  }}
+                  className="gap-1 rounded-lg border-rose-200 bg-rose-50/70 font-bold text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/20"
+                >
+                  <Trash2 className="size-3.5" />
+                  <span>Hapus Draft</span>
+                </Button>
+              ) : null}
               <Link
                 href={`/kpi/evaluations/${row.id}`}
                 onClick={(e) => e.stopPropagation()}
@@ -325,7 +372,7 @@ export function EvaluationsDirectoryClient({
         },
       }),
     ],
-    []
+    [data.canDeleteDraft, data.isSuperAdmin, isPending]
   );
 
   return (
@@ -553,6 +600,19 @@ export function EvaluationsDirectoryClient({
           </DialogContent>
         </Dialog>
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Hapus Draft Evaluasi?"
+        description={`Draft evaluasi KPI untuk ${deleteTarget?.userName ?? ""} periode ${deleteTarget?.periodMonthLabel ?? ""} akan dihapus permanen. Anda dapat melakukan generate ulang jika diperlukan.`}
+        confirmLabel="Hapus Draft"
+        variant="destructive"
+        isLoading={isPending}
+        onConfirm={handleConfirmDeleteDraft}
+      />
     </div>
   );
 }

@@ -62,6 +62,21 @@ export default async function MyTasksPage({
     getTaskFormOptions(ctx),
   ]);
 
+  const canCreateTask = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_ITEM_CREATE,
+    ctx.roleCode
+  );
+  const canEditTask = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_ITEM_UPDATE,
+    ctx.roleCode
+  );
+  const canDeleteTask = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_ITEM_DELETE,
+    ctx.roleCode
+  );
   const canAssignOthers = hasPermission(
     ctx.permissions,
     PERMISSIONS.TASKS_ITEM_ASSIGN,
@@ -80,6 +95,9 @@ export default async function MyTasksPage({
         projects={formOptions.projects}
         assignees={formOptions.assignees}
         currentUserId={ctx.userId}
+        canCreateTask={canCreateTask}
+        canEditTask={canEditTask}
+        canDeleteTask={canDeleteTask}
         canAssignOthers={canAssignOthers}
         canApproveTasks={canApproveTasks}
       />

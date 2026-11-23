@@ -45,6 +45,10 @@ export const startDesignBriefSchema = z.object({
   designBriefId: z.string().uuid("ID brief desain tidak valid."),
 });
 
+export const deleteDesignBriefSchema = z.object({
+  designBriefId: z.string().uuid("ID brief desain tidak valid."),
+});
+
 export const submitDesignSchema = z
   .object({
     designBriefId: z.string().uuid("Brief desain wajib dipilih."),

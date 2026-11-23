@@ -599,7 +599,7 @@ model ContentAnalytic {
 model Task {
   id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   taskCode         String       @unique @map("task_code") @db.VarChar(30)
-  projectId        String       @map("project_id") @db.Uuid
+  projectId        String?      @map("project_id") @db.Uuid
   parentTaskId     String?      @map("parent_task_id") @db.Uuid
   contentItemId    String?      @map("content_item_id") @db.Uuid
   designBriefId    String?      @map("design_brief_id") @db.Uuid
@@ -628,7 +628,7 @@ model Task {
   updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz
   deletedAt        DateTime?    @map("deleted_at") @db.Timestamptz
 
-  project     Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  project     Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   parentTask  Task?            @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
   subtasks    Task[]           @relation("TaskSubtasks")
   contentItem ContentItem?     @relation(fields: [contentItemId], references: [id], onDelete: SetNull)

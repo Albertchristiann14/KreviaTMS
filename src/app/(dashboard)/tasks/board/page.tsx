@@ -88,6 +88,16 @@ export default async function KanbanBoardPage({
     PERMISSIONS.TASKS_ITEM_CREATE,
     ctx.roleCode
   );
+  const canEditTask = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_ITEM_UPDATE,
+    ctx.roleCode
+  );
+  const canDeleteTask = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_ITEM_DELETE,
+    ctx.roleCode
+  );
   const canAssignTask = hasPermission(
     ctx.permissions,
     PERMISSIONS.TASKS_ITEM_ASSIGN,
@@ -103,6 +113,8 @@ export default async function KanbanBoardPage({
         assignees={formOptions.assignees}
         currentUserId={ctx.userId}
         canCreateTask={canCreateTask}
+        canEditTask={canEditTask}
+        canDeleteTask={canDeleteTask}
         canAssignTask={canAssignTask}
       />
     </Suspense>

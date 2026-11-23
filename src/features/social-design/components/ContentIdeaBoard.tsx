@@ -14,9 +14,11 @@ import {
   Plus,
   Search,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   createContentIdeaAction,
+  deleteContentIdeaAction,
   reviewContentIdeaAction,
   toggleIdeaUpvoteAction,
 } from "@/features/social-design/actions/content-idea.actions";
@@ -70,6 +73,7 @@ export interface ContentIdeaBoardProps {
   canCreateIdea: boolean;
   canApproveIdea: boolean;
   canManageContent: boolean;
+  canDeleteContent?: boolean;
 }
 
 const IDEA_STATUS_PILLS: Array<{
@@ -151,6 +155,7 @@ export function ContentIdeaBoard({
   canCreateIdea,
   canApproveIdea,
   canManageContent,
+  canDeleteContent = false,
 }: ContentIdeaBoardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -189,6 +194,10 @@ export function ContentIdeaBoard({
   const [promoteTarget, setPromoteTarget] = useState<ContentIdeaDTO | null>(
     null
   );
+
+  // Delete Idea ConfirmDialog state
+  const [deleteTarget, setDeleteTarget] = useState<ContentIdeaDTO | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredIdeas = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -362,6 +371,25 @@ export function ContentIdeaBoard({
     });
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteContentIdeaAction({ ideaId: deleteTarget.id });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(res.message ?? "Ide konten berhasil dihapus.");
+      setDeleteTarget(null);
+      router.refresh();
+    } catch {
+      toast.error("Gagal menghapus ide konten.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       {/* Studio Toolbar: Status Filter Pills + Search + Channel + New CTA */}
@@ -477,6 +505,11 @@ export function ContentIdeaBoard({
               canManageContent &&
               (idea.status === "APPROVED_IDEA" ||
                 (idea.status === "IDEA" && canApproveIdea));
+            const canDeleteThisIdea =
+              canDeleteContent ||
+              (idea.proposedBy === currentUserId &&
+                idea.status === "IDEA" &&
+                canCreateIdea);
 
             return (
               <div
@@ -529,10 +562,12 @@ export function ContentIdeaBoard({
                     <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                       <span
                         className="size-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: idea.projectColorHex }}
+                        style={{
+                          backgroundColor: idea.projectColorHex || "#64748b",
+                        }}
                       />
                       <span className="truncate">
-                        {idea.projectCode} · {idea.projectName}
+                        {idea.projectCode ?? "UMUM"} · {idea.projectName ?? "Umum"}
                       </span>
                     </span>
                   </div>
@@ -593,21 +628,38 @@ export function ContentIdeaBoard({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleUpvote(idea)}
-                      disabled={isPending}
-                      aria-label={`Upvote ${idea.title}`}
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-bold tabular-nums transition-all",
-                        idea.hasUpvoted
-                          ? "border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-                          : "border-slate-200 bg-slate-100 text-slate-800 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-blue-500 dark:hover:bg-blue-950 dark:hover:text-blue-300"
-                      )}
-                    >
-                      <span className="text-[10px] leading-none">▲</span>
-                      <span>{idea.upvoteCount}</span>
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {canDeleteThisIdea ? (
+                        <Button
+                          type="button"
+                          size="icon-xs"
+                          variant="ghost"
+                          onClick={() => setDeleteTarget(idea)}
+                          disabled={isPending || isDeleting}
+                          aria-label={`Hapus ide ${idea.title}`}
+                          title="Hapus Ide"
+                          className="size-7 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-destructive dark:text-slate-500 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={() => handleUpvote(idea)}
+                        disabled={isPending}
+                        aria-label={`Upvote ${idea.title}`}
+                        className={cn(
+                          "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-bold tabular-nums transition-all",
+                          idea.hasUpvoted
+                            ? "border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                            : "border-slate-200 bg-slate-100 text-slate-800 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-blue-500 dark:hover:bg-blue-950 dark:hover:text-blue-300"
+                        )}
+                      >
+                        <span className="text-[10px] leading-none">▲</span>
+                        <span>{idea.upvoteCount}</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Contextual Quick Actions */}
@@ -915,6 +967,20 @@ export function ContentIdeaBoard({
             router.refresh();
           }
         }}
+      />
+
+      {/* Confirm Delete Idea Dialog */}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Hapus Ide Konten?"
+        description={`Ide konten "${deleteTarget?.title ?? ""}" akan dihapus secara permanen dari bank ide.`}
+        confirmLabel="Hapus Ide"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );

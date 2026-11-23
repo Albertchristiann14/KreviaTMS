@@ -188,7 +188,7 @@ export function DesignReviewInspector({
         <div className="space-y-2.5 border-b border-slate-200 pb-4 dark:border-slate-800">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
-              {brief.projectCode}
+              {brief.projectCode ?? "UMUM"}
             </span>
             {brief.linkedTask ? (
               <Badge
@@ -708,7 +708,7 @@ export function DesignApprovalDrawer({
                   variant="outline"
                   className="border-slate-200 bg-slate-100 font-mono text-[10px] font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 >
-                  {brief.projectCode}
+                  {brief.projectCode ?? "UMUM"}
                 </Badge>
                 {brief.linkedTask ? (
                   <Badge

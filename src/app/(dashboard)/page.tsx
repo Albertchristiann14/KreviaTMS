@@ -905,14 +905,23 @@ async function OverviewDashboardBody({ ctx }: { ctx: AuthContext }) {
                           <div className="flex flex-wrap items-center gap-2">
                             <span
                               className="size-2 shrink-0 rounded-full"
-                              style={{ backgroundColor: task.project.colorHex }}
+                              style={{
+                                backgroundColor:
+                                  task.project?.colorHex ?? "#64748B",
+                              }}
                             />
                             <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                               {task.taskCode}
                             </span>
-                            <span className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
-                              {task.project.name}
-                            </span>
+                            {task.project?.id ? (
+                              <span className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                {task.project.name}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                Tanpa Proyek
+                              </span>
+                            )}
                           </div>
                           <p className="truncate text-sm font-semibold text-slate-900 transition-colors group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400">
                             {task.title}

@@ -37,6 +37,7 @@ export const TASK_BOARD_CARD_SELECT = {
       code: true,
       name: true,
       colorHex: true,
+      deletedAt: true,
     },
   },
   assignee: {
@@ -97,16 +98,21 @@ export function mapTaskRowToBoardCardDto(
     if (item.isCompleted) checklistCompleted += 1;
   }
 
+  const activeProject =
+    row.project && row.project.deletedAt === null ? row.project : null;
+
   return {
     id: row.id,
     taskCode: row.taskCode,
-    projectId: row.projectId,
-    project: {
-      id: row.project.id,
-      code: row.project.code,
-      name: row.project.name,
-      colorHex: row.project.colorHex,
-    },
+    projectId: activeProject ? row.projectId : null,
+    project: activeProject
+      ? {
+          id: activeProject.id,
+          code: activeProject.code,
+          name: activeProject.name,
+          colorHex: activeProject.colorHex,
+        }
+      : null,
     title: row.title,
     description: row.description,
     taskType: row.taskType,
@@ -181,23 +187,31 @@ export function canViewAllTasks(ctx: AuthContext): boolean {
   );
 }
 
+export const ACTIVE_OR_STANDALONE_PROJECT_WHERE: Prisma.TaskWhereInput = {
+  OR: [{ projectId: null }, { project: { is: { deletedAt: null } } }],
+};
+
 export function buildTaskScopeWhere(ctx: AuthContext): Prisma.TaskWhereInput {
   if (canViewAllTasks(ctx)) {
     return {
       deletedAt: null,
-      project: { deletedAt: null },
+      ...ACTIVE_OR_STANDALONE_PROJECT_WHERE,
     };
   }
 
   return {
     deletedAt: null,
-    project: { deletedAt: null },
-    OR: [
-      { assigneeId: ctx.userId },
-      { reporterId: ctx.userId },
-      { reviewerId: ctx.userId },
-      { project: { ownerId: ctx.userId } },
-      { project: { members: { some: { userId: ctx.userId } } } },
+    AND: [
+      ACTIVE_OR_STANDALONE_PROJECT_WHERE,
+      {
+        OR: [
+          { assigneeId: ctx.userId },
+          { reporterId: ctx.userId },
+          { reviewerId: ctx.userId },
+          { project: { is: { ownerId: ctx.userId } } },
+          { project: { is: { members: { some: { userId: ctx.userId } } } } },
+        ],
+      },
     ],
   };
 }

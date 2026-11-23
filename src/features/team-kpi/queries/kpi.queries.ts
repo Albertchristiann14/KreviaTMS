@@ -241,6 +241,7 @@ export interface EvaluationsListPageData {
     periodMonth: string;
   };
   canManageEvaluations: boolean;
+  canDeleteDraft: boolean;
   isSuperAdmin: boolean;
   evaluations: EvaluationListRowDTO[];
   eligibleCandidates: Array<{
@@ -270,6 +271,11 @@ export async function getEvaluationsListData(
       PERMISSIONS.KPI_EVALUATION_REVIEW,
       PERMISSIONS.KPI_EVALUATION_FINALIZE,
     ],
+    ctx.roleCode
+  );
+  const canDeleteDraft = hasAnyPermission(
+    ctx.permissions,
+    [PERMISSIONS.KPI_EVALUATION_CREATE, PERMISSIONS.KPI_EVALUATION_REVIEW],
     ctx.roleCode
   );
 
@@ -311,6 +317,7 @@ export async function getEvaluationsListData(
     return {
       period: { year, month, periodMonth },
       canManageEvaluations: false,
+      canDeleteDraft: false,
       isSuperAdmin: false,
       evaluations: ownRows.map((ev) => {
         const isFinalized = ev.status === "FINALIZED";
@@ -493,6 +500,7 @@ export async function getEvaluationsListData(
   return {
     period: { year, month, periodMonth },
     canManageEvaluations: true,
+    canDeleteDraft,
     isSuperAdmin,
     evaluations,
     eligibleCandidates,

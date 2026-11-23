@@ -17,8 +17,10 @@ import {
   RefreshCw,
   RotateCcw,
   Table as TableIcon,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import {
   DataTable,
   createDataTableColumnHelper,
@@ -50,7 +52,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { updateContentScheduleAction } from "@/features/social-design/actions/content-plan.actions";
+import {
+  deleteContentPlanAction,
+  updateContentScheduleAction,
+} from "@/features/social-design/actions/content-plan.actions";
 import { ContentPlanFormDrawer } from "@/features/social-design/components/ContentPlanFormDrawer";
 import {
   CHANNEL_VISUAL_STYLE,
@@ -91,6 +96,7 @@ export interface ContentCalendarGridProps {
   designers: SelectableUserOption[];
   currentUserId: string;
   canManageContent: boolean;
+  canDeleteContent?: boolean;
   isAdminOrPm: boolean;
 }
 
@@ -200,10 +206,15 @@ export function ContentCalendarGrid({
   designers,
   currentUserId,
   canManageContent,
+  canDeleteContent = false,
   isAdminOrPm,
 }: ContentCalendarGridProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [deleteTarget, setDeleteTarget] = useState<ContentPlanItemDTO | null>(
+    null
+  );
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const {
     filters,
@@ -341,6 +352,29 @@ export function ContentCalendarGrid({
     });
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteContentPlanAction({
+        contentItemId: deleteTarget.id,
+      });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(res.message ?? "Content plan berhasil dihapus.");
+      setDeleteTarget(null);
+      setSelectedItem(null);
+      invalidateCalendar();
+      router.refresh();
+    } catch {
+      toast.error("Gagal menghapus Content Plan.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const tableColumns = useMemo(
     () =>
       columnHelper.columns([
@@ -352,7 +386,7 @@ export function ContentCalendarGrid({
               <div className="min-w-[200px] max-w-[340px] space-y-0.5">
                 <p className="truncate font-medium text-foreground">{row.title}</p>
                 <p className="truncate text-[11px] text-muted-foreground">
-                  {row.projectCode} ·{" "}
+                  {row.projectCode ?? "UMUM"} ·{" "}
                   {CONTENT_FORMAT_META[row.contentFormat].label}
                   {row.campaignName ? ` · ${row.campaignName}` : ""}
                 </p>
@@ -872,7 +906,7 @@ export function ContentCalendarGrid({
                                     {item.title}
                                   </p>
                                   <div className="flex items-center gap-2 text-[10px] opacity-80">
-                                    <span>{item.projectCode}</span>
+                                    <span>{item.projectCode ?? "UMUM"}</span>
                                     <span>·</span>
                                     <span>PIC: {item.creatorName}</span>
                                   </div>
@@ -957,7 +991,9 @@ export function ContentCalendarGrid({
                   {selectedItem.title}
                 </DialogTitle>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="font-mono">{selectedItem.projectCode}</span>
+                  <span className="font-mono">
+                    {selectedItem.projectCode ?? "UMUM"}
+                  </span>
                   <span>·</span>
                   <span>{selectedItem.creatorName}</span>
                 </div>
@@ -1137,21 +1173,33 @@ export function ContentCalendarGrid({
                   ) : null}
 
                   <DialogFooter className="flex-wrap justify-between gap-2">
-                    {canManageContent ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          const target = selectedItem;
-                          setSelectedItem(null);
-                          setEditingPlan(target);
-                        }}
-                      >
-                        Edit Detail
-                      </Button>
-                    ) : (
-                      <div />
-                    )}
+                    <div className="flex items-center gap-2">
+                      {canManageContent ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            const target = selectedItem;
+                            setSelectedItem(null);
+                            setEditingPlan(target);
+                          }}
+                        >
+                          Edit Detail
+                        </Button>
+                      ) : null}
+                      {canDeleteContent ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setDeleteTarget(selectedItem)}
+                          disabled={isPending || isDeleting}
+                          className="gap-1.5 border-rose-200 text-destructive hover:bg-rose-50 hover:text-destructive dark:border-rose-500/30 dark:hover:bg-rose-950/50"
+                        >
+                          <Trash2 className="size-3.5" />
+                          <span>Hapus</span>
+                        </Button>
+                      ) : null}
+                    </div>
 
                     <div className="flex gap-2">
                       <Button
@@ -1199,10 +1247,25 @@ export function ContentCalendarGrid({
         designers={designers}
         currentUserId={currentUserId}
         editingItem={editingPlan}
+        canDelete={canDeleteContent}
         onSuccess={() => {
           invalidateCalendar();
           router.refresh();
         }}
+      />
+
+      {/* Confirm Delete Content Plan Dialog */}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Hapus Content Plan?"
+        description={`Content Plan "${deleteTarget?.title ?? ""}" akan dihapus. Task produksi terkait akan dilepas sebagai task umum (tidak ikut terhapus), dan Design Brief yang ada tetap tersimpan terpisah.`}
+        confirmLabel="Hapus Content Plan"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );

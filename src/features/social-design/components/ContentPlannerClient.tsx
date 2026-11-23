@@ -14,7 +14,10 @@ import {
   Palette,
   Plus,
   Sparkles,
+  Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import {
   DataTable,
   createDataTableColumnHelper,
@@ -24,6 +27,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { deleteContentPlanAction } from "@/features/social-design/actions/content-plan.actions";
 import { ContentPlanFormDrawer } from "@/features/social-design/components/ContentPlanFormDrawer";
 import {
   ChannelPill,
@@ -51,6 +55,7 @@ export interface ContentPlannerClientProps {
   creators: SelectableUserOption[];
   designers: SelectableUserOption[];
   currentUserId: string;
+  canDeleteContent?: boolean;
 }
 
 type StageGroup =
@@ -132,6 +137,7 @@ export function ContentPlannerClient({
   creators,
   designers,
   currentUserId,
+  canDeleteContent = false,
 }: ContentPlannerClientProps) {
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -141,10 +147,35 @@ export function ContentPlannerClient({
   const [promotingIdea, setPromotingIdea] = useState<ContentIdeaDTO | null>(
     null
   );
+  const [deleteTarget, setDeleteTarget] = useState<ContentPlanItemDTO | null>(
+    null
+  );
+  const [isDeleting, setIsDeleting] = useState(false);
   const [stageFilter, setStageFilter] = useState<StageGroup>("ALL");
   const [platformFilter, setPlatformFilter] = useState<"ALL" | SocialPlatform>(
     "ALL"
   );
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteContentPlanAction({
+        contentItemId: deleteTarget.id,
+      });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(res.message ?? "Content plan berhasil dihapus.");
+      setDeleteTarget(null);
+      router.refresh();
+    } catch {
+      toast.error("Gagal menghapus Content Plan.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const stageCounts = useMemo(() => {
     const counts: Record<StageGroup, number> = {
@@ -193,9 +224,9 @@ export function ContentPlannerClient({
                   <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                     <span
                       className="size-1.5 rounded-full"
-                      style={{ backgroundColor: row.projectColorHex }}
+                      style={{ backgroundColor: row.projectColorHex || "#64748b" }}
                     />
-                    {row.projectCode}
+                    {row.projectCode ?? "UMUM"}
                   </span>
                   <span className="rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
                     {CONTENT_FORMAT_META[row.contentFormat].label}
@@ -302,7 +333,7 @@ export function ContentPlannerClient({
           id: "actions",
           header: "",
           cell: (info) => (
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-1.5">
               <Button
                 type="button"
                 size="xs"
@@ -317,11 +348,24 @@ export function ContentPlannerClient({
                 <Edit3 className="size-3" />
                 <span>Edit</span>
               </Button>
+              {canDeleteContent ? (
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant="ghost"
+                  onClick={() => setDeleteTarget(info.row.original)}
+                  aria-label={`Hapus ${info.row.original.title}`}
+                  title="Hapus Content Plan"
+                  className="size-7 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-destructive dark:text-slate-500 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              ) : null}
             </div>
           ),
         }),
       ]) as DataTableColumnDef<ContentPlanItemDTO>[],
-    []
+    [canDeleteContent]
   );
 
   return (
@@ -461,7 +505,7 @@ export function ContentPlannerClient({
                       className={VIBRANT_CHANNEL_PILL_CLASS[idea.targetPlatform]}
                     />
                     <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
-                      {idea.projectCode}
+                      {idea.projectCode ?? "UMUM"}
                     </span>
                   </div>
                   <p className="truncate text-xs font-bold text-slate-900 dark:text-white">
@@ -523,7 +567,21 @@ export function ContentPlannerClient({
         currentUserId={currentUserId}
         editingItem={editingItem}
         promotingIdea={promotingIdea}
+        canDelete={canDeleteContent}
         onSuccess={() => router.refresh()}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Hapus Content Plan?"
+        description={`Content Plan "${deleteTarget?.title ?? ""}" akan dihapus. Task produksi terkait akan dilepas sebagai task umum (tidak ikut terhapus), dan Design Brief yang ada tetap tersimpan terpisah.`}
+        confirmLabel="Hapus Content Plan"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { ContentStatus, TaskStatus, TaskType } from "@prisma/client";
 import {
   createContentPlanSchema,
+  deleteContentPlanSchema,
   updateContentPlanSchema,
   updateContentScheduleSchema,
 } from "@/features/social-design/schemas/content.schema";
@@ -266,6 +267,108 @@ export const updateContentScheduleAction = createProtectedAction({
         result.status === ContentStatus.PUBLISHED
           ? "Konten ditandai Published dan linked task CONTENT_PRODUCTION otomatis selesai (DONE)."
           : "Jadwal & status konten berhasil diperbarui.",
+    };
+  },
+});
+
+export const deleteContentPlanAction = createProtectedAction({
+  permission: PERMISSIONS.SOCIAL_CONTENT_DELETE,
+  schema: deleteContentPlanSchema,
+  handler: async ({ ctx, input }) => {
+    const data = await executeAuditedMutation(ctx, async (tx) => {
+      const existing = await tx.contentItem.findFirst({
+        where: { id: input.contentItemId, deletedAt: null },
+        include: {
+          tasks: {
+            where: { deletedAt: null },
+            select: { id: true, taskType: true },
+          },
+        },
+      });
+
+      if (!existing) {
+        throw new DomainError("NOT_FOUND", "Content plan tidak ditemukan.");
+      }
+
+      const now = new Date();
+      await tx.contentItem.update({
+        where: { id: existing.id },
+        data: { deletedAt: now },
+      });
+
+      const detachedProduction = await tx.task.updateMany({
+        where: {
+          contentItemId: existing.id,
+          taskType: TaskType.CONTENT_PRODUCTION,
+          deletedAt: null,
+        },
+        data: {
+          contentItemId: null,
+          taskType: TaskType.GENERAL,
+        },
+      });
+
+      await tx.task.updateMany({
+        where: {
+          contentItemId: existing.id,
+          deletedAt: null,
+        },
+        data: {
+          contentItemId: null,
+        },
+      });
+
+      await tx.designBrief.updateMany({
+        where: {
+          contentItemId: existing.id,
+          deletedAt: null,
+        },
+        data: {
+          contentItemId: null,
+        },
+      });
+
+      return {
+        result: {
+          id: existing.id,
+          detachedTaskCount: existing.tasks.length,
+          detachedProductionCount: detachedProduction.count,
+          deletedAt: now.toISOString(),
+        },
+        audit: {
+          module: "SOCIAL_DESIGN" as const,
+          action: "social:content:deleted",
+          entityType: "CONTENT_ITEM",
+          entityId: existing.id,
+          summary: `Content plan dihapus: ${existing.title}`,
+          oldValues: {
+            status: existing.status,
+            platform: existing.platform,
+            deletedAt: null,
+          },
+          newValues: {
+            deletedAt: now.toISOString(),
+            detachedTaskCount: existing.tasks.length,
+          },
+        },
+      };
+    });
+
+    revalidatePath("/content/planner");
+    revalidatePath("/content/calendar");
+    revalidatePath("/content/analytics");
+    revalidatePath("/design/workspace");
+    revalidatePath("/tasks/board");
+    revalidatePath("/tasks/my-tasks");
+    revalidatePath("/tasks/calendar");
+    revalidatePath("/");
+
+    return {
+      data,
+      message:
+        data.detachedTaskCount > 0
+          ? `Content plan dihapus dan ${data.detachedTaskCount} task terkait dilepas sebagai task umum.`
+          : "Content plan berhasil dihapus.",
     };
   },
 });

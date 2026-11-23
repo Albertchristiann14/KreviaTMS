@@ -88,6 +88,16 @@ export default async function WorkCalendarPage() {
     PERMISSIONS.TASKS_ITEM_CREATE,
     ctx.roleCode
   );
+  const canEditTask = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_ITEM_UPDATE,
+    ctx.roleCode
+  );
+  const canDeleteTask = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_ITEM_DELETE,
+    ctx.roleCode
+  );
   const canAssignTask = hasPermission(
     ctx.permissions,
     PERMISSIONS.TASKS_ITEM_ASSIGN,
@@ -114,6 +124,8 @@ export default async function WorkCalendarPage() {
         assignees={formOptions.assignees}
         currentUserId={ctx.userId}
         canCreateTask={canCreateTask}
+        canEditTask={canEditTask}
+        canDeleteTask={canDeleteTask}
         canEditDueDate={canEditDueDate}
         canAssignTask={canAssignTask}
       />

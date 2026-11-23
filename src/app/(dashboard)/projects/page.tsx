@@ -53,6 +53,16 @@ export default async function ProjectsPage() {
     PERMISSIONS.TASKS_PROJECT_CREATE,
     ctx.roleCode
   );
+  const canUpdateProject = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_PROJECT_UPDATE,
+    ctx.roleCode
+  );
+  const canDeleteProject = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_PROJECT_DELETE,
+    ctx.roleCode
+  );
 
   return (
     <Suspense fallback={<ProjectsSkeleton />}>
@@ -61,6 +71,8 @@ export default async function ProjectsPage() {
         assignableUsers={assignableUsers}
         currentUserId={ctx.userId}
         canCreateProject={canCreateProject}
+        canUpdateProject={canUpdateProject}
+        canDeleteProject={canDeleteProject}
       />
     </Suspense>
   );

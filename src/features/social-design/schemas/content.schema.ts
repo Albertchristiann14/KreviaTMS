@@ -42,6 +42,10 @@ export const toggleIdeaUpvoteSchema = z.object({
   ideaId: z.string().uuid("ID ide tidak valid."),
 });
 
+export const deleteContentIdeaSchema = z.object({
+  ideaId: z.string().uuid("ID ide tidak valid."),
+});
+
 export const reviewContentIdeaSchema = z
   .object({
     ideaId: z.string().uuid("ID ide tidak valid."),
@@ -175,6 +179,10 @@ export const updateContentPlanSchema = z.object({
   creatorId: z.string().uuid().optional(),
   plannedPublishAt: dateTimeStringSchema.optional().nullable(),
   requiresDesign: z.boolean().optional(),
+});
+
+export const deleteContentPlanSchema = z.object({
+  contentItemId: z.string().uuid("ID konten tidak valid."),
 });
 
 export const updateContentScheduleSchema = z

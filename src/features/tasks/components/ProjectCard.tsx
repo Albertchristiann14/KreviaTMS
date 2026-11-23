@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Calendar, CheckCircle2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Calendar,
+  CheckCircle2,
+  Edit3,
+  MoreHorizontal,
+  Trash2,
+} from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -9,6 +16,14 @@ import {
   AvatarGroupCount,
   AvatarImage,
 } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { ProjectStatus, ProjectSummaryDto } from "@/features/tasks/types";
 import { formatDisplayDateWib } from "@/features/tasks/utils/date-wib";
 import { cn } from "@/lib/utils";
@@ -69,9 +84,19 @@ export function getInitials(name: string): string {
 
 export interface ProjectCardProps {
   project: ProjectSummaryDto;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  onEdit?: (project: ProjectSummaryDto) => void;
+  onDelete?: (project: ProjectSummaryDto) => void;
 }
 
-export function ProjectCard({ project }: ProjectCardProps) {
+export function ProjectCard({
+  project,
+  canEdit = false,
+  canDelete = false,
+  onEdit,
+  onDelete,
+}: ProjectCardProps) {
   const statusMeta = PROJECT_STATUS_META[project.status];
   const denominator = Math.max(0, project.totalTasks - project.cancelledTasks);
   const visibleMembers = project.membersPreview.slice(0, 4);
@@ -79,58 +104,100 @@ export function ProjectCard({ project }: ProjectCardProps) {
     0,
     project.memberCount - visibleMembers.length
   );
+  const showActions = (canEdit && onEdit) || (canDelete && onDelete);
 
   return (
-    <Link
-      href={`/projects/${project.id}`}
-      className="group block h-full focus:outline-none"
-    >
-      <article className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-500 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-400">
-        {/* Vibrant gradient top accent bar */}
-        <div
-          className="h-2 w-full shrink-0"
-          style={{
-            background: `linear-gradient(90deg, ${project.colorHex}, ${project.colorHex}99)`,
-          }}
-        />
+    <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-500 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-400">
+      <Link
+        href={`/projects/${project.id}`}
+        aria-label={`Buka proyek ${project.name}`}
+        className="absolute inset-0 z-0 focus:outline-none"
+      />
+      {/* Vibrant gradient top accent bar */}
+      <div
+        className="h-2 w-full shrink-0"
+        style={{
+          background: `linear-gradient(90deg, ${project.colorHex}, ${project.colorHex}99)`,
+        }}
+      />
 
-        <div className="flex flex-1 flex-col p-5">
-          {/* Top Row: Code chip + Health & Status pills */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-mono text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+      <div className="flex flex-1 flex-col p-5">
+        {/* Top Row: Code chip + Health & Status pills + Action Menu */}
+        <div className="flex items-start justify-between gap-2">
+          <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-mono text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: project.colorHex }}
+            />
+            <span className="truncate">{project.code}</span>
+          </span>
+
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            {project.overdueTasks > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300">
+                <AlertTriangle className="size-3 shrink-0" />
+                <span>{project.overdueTasks} Overdue</span>
+              </span>
+            ) : project.status === "ACTIVE" ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300">
+                <CheckCircle2 className="size-3 shrink-0" />
+                <span>On Track</span>
+              </span>
+            ) : null}
+
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                statusMeta.badgeClass
+              )}
+            >
               <span
-                className="size-2 shrink-0 rounded-full"
-                style={{ backgroundColor: project.colorHex }}
+                className={cn("size-1.5 rounded-full", statusMeta.dotClass)}
               />
-              <span className="truncate">{project.code}</span>
+              <span>{statusMeta.label}</span>
             </span>
 
-            <div className="flex flex-wrap items-center gap-1.5">
-              {project.overdueTasks > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300">
-                  <AlertTriangle className="size-3 shrink-0" />
-                  <span>{project.overdueTasks} Overdue</span>
-                </span>
-              ) : project.status === "ACTIVE" ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300">
-                  <CheckCircle2 className="size-3 shrink-0" />
-                  <span>On Track</span>
-                </span>
-              ) : null}
-
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold",
-                  statusMeta.badgeClass
-                )}
-              >
-                <span
-                  className={cn("size-1.5 rounded-full", statusMeta.dotClass)}
-                />
-                <span>{statusMeta.label}</span>
-              </span>
-            </div>
+            {showActions ? (
+              <div className="relative z-10">
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        className="size-6 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                        aria-label={`Aksi proyek ${project.code}`}
+                      />
+                    }
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    {canEdit && onEdit ? (
+                      <DropdownMenuItem onClick={() => onEdit(project)}>
+                        <Edit3 className="size-3.5" />
+                        <span>Edit Proyek</span>
+                      </DropdownMenuItem>
+                    ) : null}
+                    {canEdit && onEdit && canDelete && onDelete ? (
+                      <DropdownMenuSeparator />
+                    ) : null}
+                    {canDelete && onDelete ? (
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => onDelete(project)}
+                      >
+                        <Trash2 className="size-3.5" />
+                        <span>Hapus Proyek</span>
+                      </DropdownMenuItem>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : null}
           </div>
+        </div>
 
           {/* Bold Project Title & Readable Description */}
           <div className="mt-4 min-w-0 space-y-1.5">
@@ -221,6 +288,5 @@ export function ProjectCard({ project }: ProjectCardProps) {
           </span>
         </div>
       </article>
-    </Link>
   );
 }

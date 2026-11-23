@@ -332,15 +332,26 @@ export async function GET(request: NextRequest) {
         where: {
           deletedAt: null,
           status: { not: "CANCELLED" },
-          ...(projectId ? { projectId } : {}),
           ...(department
             ? { assignee: { department } }
             : {}),
-          OR: [
-            { dueDate: { gte: window.start, lt: window.end } },
+          AND: [
+            projectId
+              ? { projectId, project: { is: { deletedAt: null } } }
+              : {
+                  OR: [
+                    { projectId: null },
+                    { project: { is: { deletedAt: null } } },
+                  ],
+                },
             {
-              dueDate: null,
-              completedAt: { gte: window.start, lt: window.end },
+              OR: [
+                { dueDate: { gte: window.start, lt: window.end } },
+                {
+                  dueDate: null,
+                  completedAt: { gte: window.start, lt: window.end },
+                },
+              ],
             },
           ],
         },
@@ -399,8 +410,8 @@ export async function GET(request: NextRequest) {
 
         return [
           t.taskCode,
-          t.project.code,
-          t.project.name,
+          t.project?.code ?? "Tanpa Proyek",
+          t.project?.name ?? "Umum",
           t.title,
           t.taskType,
           t.status,

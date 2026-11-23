@@ -17,10 +17,12 @@ import {
   Palette,
   Plus,
   Search,
+  Trash2,
   UploadCloud,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +52,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   assignDesignBriefAction,
+  deleteDesignBriefAction,
   startDesignBriefAction,
 } from "@/features/social-design/actions/design.actions";
 import { DesignSubmissionModal } from "@/features/social-design/components/DesignSubmissionModal";
@@ -91,6 +94,7 @@ export interface DesignWorkspaceListProps {
   canManageBriefs: boolean;
   canSubmitDesign: boolean;
   canApproveDesign: boolean;
+  canDeleteBriefs?: boolean;
   initialBriefId?: string;
 }
 
@@ -127,10 +131,13 @@ export function DesignWorkspaceList({
   canManageBriefs,
   canSubmitDesign,
   canApproveDesign,
+  canDeleteBriefs = false,
   initialBriefId,
 }: DesignWorkspaceListProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [deleteTarget, setDeleteTarget] = useState<DesignBriefDTO | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [bottleneckOnly, setBottleneckOnly] = useState(false);
@@ -326,6 +333,30 @@ export function DesignWorkspaceList({
     });
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteDesignBriefAction({
+        designBriefId: deleteTarget.id,
+      });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(res.message ?? "Brief desain berhasil dihapus.");
+      if (activeBriefId === deleteTarget.id) {
+        setActiveBriefId(null);
+      }
+      setDeleteTarget(null);
+      router.refresh();
+    } catch {
+      toast.error("Gagal menghapus brief desain.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       {/* Studio Filter & Action Bar */}
@@ -507,8 +538,8 @@ export function DesignWorkspaceList({
                 >
                   <DesignArtboardThumb
                     title={cleanTitle}
-                    projectCode={brief.projectCode}
-                    projectColorHex={brief.projectColorHex}
+                    projectCode={brief.projectCode ?? "UMUM"}
+                    projectColorHex={brief.projectColorHex || "#64748b"}
                     platform={brief.contentPlatform}
                     contentFormat={brief.contentFormat}
                     dimensionsSpec={brief.dimensionsSpec}
@@ -540,7 +571,7 @@ export function DesignWorkspaceList({
                         </span>
                       ) : null}
                       <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 font-mono text-[10px] font-bold text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                        {brief.projectCode}
+                        {brief.projectCode ?? "UMUM"}
                       </span>
                     </div>
                   </div>
@@ -642,6 +673,20 @@ export function DesignWorkspaceList({
                         <Edit3 className="size-3" />
                       </Button>
                     ) : null}
+
+                    {canDeleteBriefs ? (
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="outline"
+                        onClick={() => setDeleteTarget(brief)}
+                        aria-label={`Hapus brief ${cleanTitle}`}
+                        title="Hapus Brief"
+                        className="size-7 rounded-lg border-rose-200 bg-white text-destructive hover:bg-rose-50 hover:text-destructive dark:border-rose-500/30 dark:bg-slate-800 dark:hover:bg-rose-950/50"
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -666,7 +711,7 @@ export function DesignWorkspaceList({
               <SheetHeader className="border-b border-slate-200 bg-white px-6 py-4 pr-12 dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
-                    {activeBrief.projectCode}
+                    {activeBrief.projectCode ?? "UMUM"}
                   </span>
                   {activeBrief.linkedTask ? (
                     <Badge
@@ -730,18 +775,33 @@ export function DesignWorkspaceList({
                         Brief Spec
                       </span>
                     </div>
-                    {canManageBriefs && activeBrief.status !== "APPROVED" ? (
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant="outline"
-                        onClick={() => openCreateBriefDialog(activeBrief)}
-                        className="border-slate-200 font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200"
-                      >
-                        <Edit3 className="size-3" />
-                        <span>Edit</span>
-                      </Button>
-                    ) : null}
+                    <div className="flex items-center gap-1.5">
+                      {canManageBriefs && activeBrief.status !== "APPROVED" ? (
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          onClick={() => openCreateBriefDialog(activeBrief)}
+                          className="border-slate-200 font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200"
+                        >
+                          <Edit3 className="size-3" />
+                          <span>Edit</span>
+                        </Button>
+                      ) : null}
+                      {canDeleteBriefs ? (
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          onClick={() => setDeleteTarget(activeBrief)}
+                          disabled={isDeleting}
+                          className="border-rose-200 font-semibold text-destructive hover:bg-rose-50 hover:text-destructive dark:border-rose-500/30 dark:hover:bg-rose-950/50"
+                        >
+                          <Trash2 className="size-3" />
+                          <span>Hapus</span>
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                   <p className="whitespace-pre-wrap break-words leading-relaxed font-medium text-slate-800 dark:text-slate-100">
                     {activeBrief.objective}
@@ -1198,6 +1258,19 @@ export function DesignWorkspaceList({
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Hapus Brief Desain?"
+        description={`Brief desain "${deleteTarget?.title ?? ""}" beserta riwayat versinya akan dihapus. Task desain terkait akan dilepas sebagai task umum (tidak ikut terhapus).`}
+        confirmLabel="Hapus Brief"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

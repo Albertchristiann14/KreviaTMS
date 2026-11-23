@@ -54,6 +54,11 @@ export default async function ContentCalendarPage({
     PERMISSIONS.SOCIAL_CONTENT_MANAGE,
     ctx.roleCode
   );
+  const canDeleteContent = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.SOCIAL_CONTENT_DELETE,
+    ctx.roleCode
+  );
   const isAdminOrPm =
     ctx.roleCode === "SUPER_ADMIN" || ctx.roleCode === "PROJECT_MANAGER";
 
@@ -94,6 +99,7 @@ export default async function ContentCalendarPage({
         designers={options.designers}
         currentUserId={ctx.userId}
         canManageContent={canManageContent}
+        canDeleteContent={canDeleteContent}
         isAdminOrPm={isAdminOrPm}
       />
     </div>

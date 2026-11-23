@@ -8,11 +8,15 @@ import {
   ClipboardCheck,
   Maximize2,
   Search,
+  Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { deleteDesignBriefAction } from "@/features/social-design/actions/design.actions";
 import {
   DesignApprovalDrawer,
   DesignReviewInspector,
@@ -30,6 +34,7 @@ export interface DesignReviewQueueClientProps {
   initialBriefs: DesignBriefDTO[];
   currentUserId: string;
   canApprove: boolean;
+  canDeleteBriefs?: boolean;
   initialBriefId?: string;
 }
 
@@ -76,9 +81,12 @@ export function DesignReviewQueueClient({
   initialBriefs,
   currentUserId,
   canApprove,
+  canDeleteBriefs = false,
   initialBriefId,
 }: DesignReviewQueueClientProps) {
   const router = useRouter();
+  const [deleteTarget, setDeleteTarget] = useState<DesignBriefDTO | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [tab, setTab] = useState<ReviewTab>(() =>
     resolveInitialTab(initialBriefs, initialBriefId)
@@ -92,6 +100,31 @@ export function DesignReviewQueueClient({
       null
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteDesignBriefAction({
+        designBriefId: deleteTarget.id,
+      });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(res.message ?? "Brief desain berhasil dihapus.");
+      if (selectedBriefId === deleteTarget.id) {
+        setSelectedBriefId(null);
+        setDrawerOpen(false);
+      }
+      setDeleteTarget(null);
+      router.refresh();
+    } catch {
+      toast.error("Gagal menghapus brief desain.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const counts = useMemo(() => {
     let submitted = 0;
@@ -252,8 +285,8 @@ export function DesignReviewQueueClient({
                 >
                   <DesignArtboardThumb
                     title={cleanTitle}
-                    projectCode={brief.projectCode}
-                    projectColorHex={brief.projectColorHex}
+                    projectCode={brief.projectCode ?? "UMUM"}
+                    projectColorHex={brief.projectColorHex || "#64748b"}
                     platform={brief.contentPlatform}
                     contentFormat={brief.contentFormat}
                     dimensionsSpec={brief.dimensionsSpec}
@@ -321,7 +354,20 @@ export function DesignReviewQueueClient({
           {/* Right Sticky Side-by-Side Review Stage (Desktop) */}
           {activeBrief ? (
             <div className="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:sticky lg:top-20 lg:block dark:border-slate-800 dark:bg-slate-900">
-              <div className="mb-2 flex justify-end">
+              <div className="mb-2 flex items-center justify-end gap-2">
+                {canDeleteBriefs ? (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={() => setDeleteTarget(activeBrief)}
+                    disabled={isDeleting}
+                    className="gap-1.5 rounded-lg border-rose-200 bg-rose-50/60 font-semibold text-destructive hover:bg-rose-100 hover:text-destructive dark:border-rose-500/30 dark:bg-rose-950/30 dark:hover:bg-rose-950/60"
+                  >
+                    <Trash2 className="size-3" />
+                    <span>Hapus Brief</span>
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="xs"
@@ -354,6 +400,19 @@ export function DesignReviewQueueClient({
         currentUserId={currentUserId}
         canApprove={canApprove}
         onSuccess={() => router.refresh()}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Hapus Brief Desain?"
+        description={`Brief desain "${deleteTarget?.title ?? ""}" beserta riwayat versinya akan dihapus. Task desain terkait akan dilepas sebagai task umum (tidak ikut terhapus).`}
+        confirmLabel="Hapus Brief"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );

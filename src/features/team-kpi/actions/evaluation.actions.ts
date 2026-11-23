@@ -16,6 +16,7 @@ import { createProtectedAction } from "@/server/actions/safe-action";
 import { executeAuditedMutation } from "@/server/services/audit-logger";
 import { DomainError } from "@/types/action-result";
 import {
+  deleteDraftEvaluationSchema,
   generateMonthlyEvaluationSchema,
   reopenEvaluationSchema,
   resyncDraftEvaluationSchema,
@@ -1329,6 +1330,93 @@ export const reopenEvaluationAction = createProtectedAction({
     return {
       data: reopened,
       message: `Evaluasi berhasil dibuka kembali ke status ${reopened.status} dan tercatat di Activity Logs.`,
+    };
+  },
+});
+
+export const deleteDraftEvaluationAction = createProtectedAction({
+  schema: deleteDraftEvaluationSchema,
+  handler: async ({ ctx, input }) => {
+    const canDelete = hasAnyPermission(
+      ctx.permissions,
+      [PERMISSIONS.KPI_EVALUATION_CREATE, PERMISSIONS.KPI_EVALUATION_REVIEW],
+      ctx.roleCode
+    );
+    if (!canDelete) {
+      throw new DomainError(
+        "FORBIDDEN",
+        "Anda tidak memiliki izin untuk menghapus draft evaluasi KPI."
+      );
+    }
+
+    const deleted = await executeAuditedMutation(ctx, async (tx) => {
+      const evaluation = await tx.monthlyEvaluation.findUnique({
+        where: { id: input.evaluationId },
+        include: {
+          user: { select: { fullName: true, role: { select: { code: true } } } },
+          items: { select: { id: true } },
+        },
+      });
+
+      if (!evaluation) {
+        throw new DomainError("NOT_FOUND", "Dokumen evaluasi tidak ditemukan.");
+      }
+
+      assertCanEvaluateTarget({
+        actorUserId: ctx.userId,
+        actorRole: ctx.roleCode,
+        evaluateeUserId: evaluation.userId,
+        evaluateeRole: evaluation.user.role.code as RoleCode,
+      });
+
+      if (evaluation.status !== "DRAFT") {
+        throw new DomainError(
+          "INVALID_STATE_TRANSITION",
+          `Evaluasi berstatus ${evaluation.status} tidak dapat dihapus. Hanya evaluasi berstatus DRAFT yang boleh dihapus.`
+        );
+      }
+
+      const periodLabel = formatPeriodMonthLabel(
+        evaluation.periodYear,
+        evaluation.periodMonth
+      );
+
+      await tx.monthlyEvaluation.delete({
+        where: { id: evaluation.id },
+      });
+
+      return {
+        result: {
+          id: evaluation.id,
+          userId: evaluation.userId,
+          userName: evaluation.user.fullName,
+          periodMonth: periodLabel,
+        },
+        audit: {
+          module: "TEAM_KPI" as const,
+          action: "KPI_DRAFT_DELETED",
+          entityType: "MONTHLY_EVALUATION",
+          entityId: evaluation.id,
+          summary: `Draft evaluasi KPI ${evaluation.user.fullName} periode ${periodLabel} dihapus oleh ${ctx.fullName}.`,
+          oldValues: {
+            userId: evaluation.userId,
+            userName: evaluation.user.fullName,
+            periodMonth: periodLabel,
+            status: evaluation.status,
+            itemsCount: evaluation.items.length,
+          },
+        },
+      };
+    });
+
+    revalidatePath("/kpi/evaluations");
+    revalidatePath("/kpi/dashboard");
+    revalidatePath("/kpi/reports");
+    revalidatePath(`/team/${deleted.userId}`);
+
+    return {
+      data: deleted,
+      message: `Draft evaluasi ${deleted.userName} (${deleted.periodMonth}) berhasil dihapus.`,
     };
   },
 });

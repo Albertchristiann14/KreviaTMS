@@ -470,7 +470,7 @@ export async function assignDesignBriefAtomic(
       : Promise.resolve(null),
   ]);
 
-  if (!project) {
+  if (!input.briefId && !project) {
     throw new DomainError("NOT_FOUND", "Proyek tidak ditemukan.");
   }
 
@@ -559,7 +559,7 @@ export async function assignDesignBriefAtomic(
         }
       } else {
         const spawned = await spawnLinkedTask(tx, {
-          projectId: updatedBrief.projectId,
+          projectId: project ? updatedBrief.projectId : null,
           title: `[Desain] ${updatedBrief.title}`,
           description: updatedBrief.objective,
           taskType: TaskType.DESIGN_TASK,

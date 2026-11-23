@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { TaskType } from "@prisma/client";
 import {
   assignDesignBriefSchema,
+  deleteDesignBriefSchema,
   reviewDesignSubmissionSchema,
   startDesignBriefSchema,
   submitDesignSchema,
@@ -13,8 +15,10 @@ import {
   startDesignBriefAtomic,
   submitDesignVersionAtomic,
 } from "@/features/social-design/services/content-workflow.service";
-import { PERMISSIONS } from "@/lib/constants/permissions";
+import { hasAnyPermission, PERMISSIONS } from "@/lib/constants/permissions";
 import { createProtectedAction } from "@/server/actions/safe-action";
+import { executeAuditedMutation } from "@/server/services/audit-logger";
+import { DomainError } from "@/types/action-result";
 
 export const assignDesignBriefAction = createProtectedAction({
   permission: PERMISSIONS.DESIGN_BRIEF_MANAGE,
@@ -126,6 +130,91 @@ export const reviewDesignSubmissionAction = createProtectedAction({
         result.submissionStatus === "APPROVED"
           ? `Desain v${result.versionNumber} disetujui${result.promotedAssetId ? " & otomatis tersimpan ke Asset Library" : ""}. Konten siap tayang!`
           : `Permintaan revisi #${result.totalRevisionCount} terkirim ke Designer.`,
+    };
+  },
+});
+
+export const deleteDesignBriefAction = createProtectedAction({
+  permission: null,
+  schema: deleteDesignBriefSchema,
+  handler: async ({ ctx, input }) => {
+    if (
+      !hasAnyPermission(
+        ctx.permissions,
+        [PERMISSIONS.DESIGN_BRIEF_MANAGE, PERMISSIONS.SOCIAL_CONTENT_DELETE],
+        ctx.roleCode
+      )
+    ) {
+      throw new DomainError(
+        "FORBIDDEN",
+        "Anda membutuhkan izin design:brief:manage atau social:content:delete untuk menghapus brief desain."
+      );
+    }
+
+    const data = await executeAuditedMutation(ctx, async (tx) => {
+      const existing = await tx.designBrief.findFirst({
+        where: { id: input.designBriefId, deletedAt: null },
+      });
+
+      if (!existing) {
+        throw new DomainError("NOT_FOUND", "Brief desain tidak ditemukan.");
+      }
+
+      const now = new Date();
+      await tx.designBrief.update({
+        where: { id: existing.id },
+        data: { deletedAt: now },
+      });
+
+      // Satisfy PostgreSQL CHECK constraint chk_tasks_type_fk_alignment:
+      // (task_type <> 'DESIGN_TASK' OR design_brief_id IS NOT NULL)
+      const detached = await tx.task.updateMany({
+        where: { designBriefId: existing.id, deletedAt: null },
+        data: {
+          designBriefId: null,
+          taskType: TaskType.GENERAL,
+        },
+      });
+
+      return {
+        result: {
+          id: existing.id,
+          detachedTaskCount: detached.count,
+          deletedAt: now.toISOString(),
+        },
+        audit: {
+          module: "SOCIAL_DESIGN" as const,
+          action: "design:brief:deleted",
+          entityType: "DESIGN_BRIEF",
+          entityId: existing.id,
+          summary: `Brief desain dihapus: ${existing.title}`,
+          oldValues: {
+            status: existing.status,
+            deletedAt: null,
+          },
+          newValues: {
+            deletedAt: now.toISOString(),
+            detachedTaskCount: detached.count,
+          },
+        },
+      };
+    });
+
+    revalidatePath("/design/workspace");
+    revalidatePath("/design/reviews");
+    revalidatePath("/content/calendar");
+    revalidatePath("/content/planner");
+    revalidatePath("/tasks/board");
+    revalidatePath("/tasks/my-tasks");
+    revalidatePath("/tasks/calendar");
+    revalidatePath("/");
+
+    return {
+      data,
+      message:
+        data.detachedTaskCount > 0
+          ? `Brief desain dihapus dan ${data.detachedTaskCount} task desain dilepas sebagai task umum.`
+          : "Brief desain berhasil dihapus.",
     };
   },
 });

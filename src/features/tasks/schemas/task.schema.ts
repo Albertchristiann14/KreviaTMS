@@ -19,11 +19,14 @@ const optionalNullableStringDate = z
   .trim()
   .optional()
   .nullable()
-  .transform((val) => (val && val.length > 0 ? val : null));
+  .transform((val) => {
+    if (val === undefined) return undefined;
+    return val && val.length > 0 ? val : null;
+  });
 
 export const createTaskSchema = z
   .object({
-    projectId: z.string().uuid("Proyek wajib dipilih."),
+    projectId: optionalNullableUuid,
     title: z
       .string()
       .trim()
@@ -130,6 +133,7 @@ export const createTaskSchema = z
 export const updateTaskSchema = z
   .object({
     taskId: z.string().uuid("ID task tidak valid."),
+    projectId: optionalNullableUuid,
     title: z
       .string()
       .trim()

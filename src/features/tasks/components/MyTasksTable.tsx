@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowRight,
@@ -13,11 +14,14 @@ import {
   Clock,
   ExternalLink,
   Loader2,
+  Pencil,
   Plus,
   RotateCcw,
   Search,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import {
   createDataTableColumnHelper,
   DataTable,
@@ -36,7 +40,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { moveKanbanTaskAction } from "@/features/tasks/actions/task.actions";
+import {
+  moveKanbanTaskAction,
+  softDeleteTaskAction,
+} from "@/features/tasks/actions/task.actions";
 import { TaskCreateDialog } from "@/features/tasks/components/TaskCreateDialog";
 import { useMyTasksFilters } from "@/features/tasks/hooks/useTaskFilters";
 import type {
@@ -67,6 +74,9 @@ export interface MyTasksTableProps {
   projects: ProjectLookupOption[];
   assignees: AssigneeWorkloadOption[];
   currentUserId: string;
+  canCreateTask?: boolean;
+  canEditTask?: boolean;
+  canDeleteTask?: boolean;
   canAssignOthers: boolean;
   canApproveTasks: boolean;
 }
@@ -76,14 +86,23 @@ export function MyTasksTable({
   projects,
   assignees,
   currentUserId,
+  canCreateTask = true,
+  canEditTask = false,
+  canDeleteTask = false,
   canAssignOthers,
   canApproveTasks,
 }: MyTasksTableProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const openDrawer = useUIStore((s) => s.openDrawer);
   const { filters, setFilters, hasActiveFilters, resetFilters } =
     useMyTasksFilters();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskBoardCardDto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TaskBoardCardDto | null>(
+    null
+  );
+  const [isDeleting, setIsDeleting] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [searchDraft, setSearchDraft] = useState<string | null>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -121,7 +140,12 @@ export function MyTasksTable({
     const q = displayedSearch.trim().toLowerCase();
     return (list: TaskBoardCardDto[]) =>
       list.filter((task) => {
-        if (filters.projectId !== "ALL" && task.projectId !== filters.projectId) {
+        if (filters.projectId === "NONE") {
+          if (task.projectId !== null) return false;
+        } else if (
+          filters.projectId !== "ALL" &&
+          task.projectId !== filters.projectId
+        ) {
           return false;
         }
         if (filters.status !== "ALL" && task.status !== filters.status) {
@@ -134,8 +158,9 @@ export function MyTasksTable({
           return false;
         }
         if (q) {
-          const hay =
-            `${task.taskCode} ${task.title} ${task.project.name} ${task.project.code}`.toLowerCase();
+          const hay = `${task.taskCode} ${task.title} ${
+            task.project?.name ?? "Tanpa Proyek"
+          } ${task.project?.code ?? "UMUM"}`.toLowerCase();
           if (!hay.includes(q)) return false;
         }
         return true;
@@ -176,6 +201,28 @@ export function MyTasksTable({
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await softDeleteTaskAction({ taskId: deleteTarget.id });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(res.message ?? `Task ${deleteTarget.taskCode} dihapus.`);
+      void queryClient.invalidateQueries({ queryKey: ["kanban-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["slide-over-detail", "TASK_DETAIL", deleteTarget.id],
+      });
+      setDeleteTarget(null);
+      router.refresh();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const columns = useMemo<DataTableColumnDef<TaskBoardCardDto>[]>(
     () => [
       columnHelper.accessor("taskCode", {
@@ -188,7 +235,9 @@ export function MyTasksTable({
                 <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   <span
                     className="size-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: row.project.colorHex }}
+                    style={{
+                      backgroundColor: row.project?.colorHex ?? "#64748B",
+                    }}
                   />
                   <span>{row.taskCode}</span>
                 </span>
@@ -197,9 +246,15 @@ export function MyTasksTable({
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-                <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  {row.project.code}
-                </span>
+                {row.project ? (
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">
+                    {row.project.code}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                    Tanpa Proyek
+                  </span>
+                )}
                 {row.checklistTotal > 0 ? (
                   <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                     <Check className="size-2.5" />
@@ -291,39 +346,65 @@ export function MyTasksTable({
             nextAction = { label: "Approve", target: "DONE" };
           }
 
-          if (!nextAction) {
-            return (
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                Detail
-              </span>
-            );
-          }
-
           return (
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              disabled={isBusy}
-              onClick={(e) => {
-                e.stopPropagation();
-                void handleQuickAdvance(row, nextAction.target);
-              }}
-              className="gap-1 rounded-lg border-slate-200 bg-white font-semibold text-slate-700 shadow-2xs hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500/50 dark:hover:bg-blue-500/15"
+            <div
+              className="flex items-center gap-1.5"
+              onClick={(e) => e.stopPropagation()}
             >
-              {isBusy ? (
-                <Loader2 className="size-3 animate-spin" />
+              {nextAction ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  disabled={isBusy}
+                  onClick={() => void handleQuickAdvance(row, nextAction.target)}
+                  className="gap-1 rounded-lg border-slate-200 bg-white font-semibold text-slate-700 shadow-2xs hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500/50 dark:hover:bg-blue-500/15"
+                >
+                  {isBusy ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <ArrowRight className="size-3" />
+                  )}
+                  <span>{nextAction.label}</span>
+                </Button>
               ) : (
-                <ArrowRight className="size-3" />
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Detail
+                </span>
               )}
-              <span>{nextAction.label}</span>
-            </Button>
+
+              {canEditTask ? (
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant="ghost"
+                  aria-label={`Edit ${row.taskCode}`}
+                  onClick={() => setEditingTask(row)}
+                  className="size-7 rounded-lg text-slate-500 hover:bg-blue-50 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-blue-500/15 dark:hover:text-blue-400"
+                >
+                  <Pencil className="size-3.5" />
+                </Button>
+              ) : null}
+
+              {canDeleteTask ? (
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant="ghost"
+                  aria-label={`Hapus ${row.taskCode}`}
+                  onClick={() => setDeleteTarget(row)}
+                  className="size-7 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-500/15 dark:hover:text-rose-400"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              ) : null}
+            </div>
           );
         },
       }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pendingTaskId, canApproveTasks]
+    [pendingTaskId, canApproveTasks, canEditTask, canDeleteTask]
   );
 
   const renderSection = (
@@ -374,15 +455,17 @@ export function MyTasksTable({
           </span>
         </div>
 
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => setCreateOpen(true)}
-          className="h-9 gap-1.5 rounded-xl bg-blue-600 px-3.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
-        >
-          <Plus className="size-3.5" />
-          <span>Task Baru</span>
-        </Button>
+        {canCreateTask ? (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+            className="h-9 gap-1.5 rounded-xl bg-blue-600 px-3.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
+          >
+            <Plus className="size-3.5" />
+            <span>Task Baru</span>
+          </Button>
+        ) : null}
       </div>
 
       {/* High-Contrast Bento Urgency Strip */}
@@ -491,6 +574,7 @@ export function MyTasksTable({
               {(val: string | null) => {
                 const label = (() => {
                   if (!val || val === "ALL") return "Semua Proyek";
+                  if (val === "NONE") return "Tanpa Proyek (Umum)";
                   const p = projects.find((item) => item.id === val);
                   return p ? `${p.code} · ${p.name}` : "Proyek";
                 })();
@@ -500,6 +584,7 @@ export function MyTasksTable({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">Semua Proyek</SelectItem>
+            <SelectItem value="NONE">Tanpa Proyek (Umum)</SelectItem>
             {projects.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 <span className="truncate">
@@ -662,15 +747,17 @@ export function MyTasksTable({
               title="Tidak ada tugas aktif"
               description="Semua tugas selesai atau belum ada sesuai filter."
               action={
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setCreateOpen(true)}
-                  className="bg-blue-600 font-semibold text-white hover:bg-blue-700"
-                >
-                  <Plus className="size-3.5" />
-                  <span>Task Baru</span>
-                </Button>
+                canCreateTask ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setCreateOpen(true)}
+                    className="bg-blue-600 font-semibold text-white hover:bg-blue-700"
+                  >
+                    <Plus className="size-3.5" />
+                    <span>Task Baru</span>
+                  </Button>
+                ) : undefined
               }
             />
           ) : (
@@ -729,12 +816,37 @@ export function MyTasksTable({
       </Tabs>
 
       <TaskCreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+        open={createOpen || Boolean(editingTask)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreateOpen(false);
+            setEditingTask(null);
+          }
+        }}
         projects={projects}
         assignees={assignees}
         currentUserId={currentUserId}
         canAssignOthers={canAssignOthers}
+        defaultProjectId={
+          filters.projectId !== "ALL" && filters.projectId !== "NONE"
+            ? filters.projectId
+            : undefined
+        }
+        editTask={editingTask}
+        onUpdated={() => router.refresh()}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={`Hapus Task ${deleteTarget?.taskCode ?? ""}?`}
+        description={`Task "${deleteTarget?.title ?? ""}" akan dihapus dari tampilan aktif.`}
+        confirmLabel="Hapus Task"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );

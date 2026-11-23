@@ -15,6 +15,7 @@ import {
   Loader2,
   MessageSquare,
   Paperclip,
+  Pencil,
   Plus,
   Send,
   Trash2,
@@ -68,6 +69,7 @@ import {
   updateTaskAction,
 } from "@/features/tasks/actions/task.actions";
 import { getInitials } from "@/features/tasks/components/ProjectCard";
+import { TaskCreateDialog } from "@/features/tasks/components/TaskCreateDialog";
 import type { TaskDetailApiResponse } from "@/features/tasks/types";
 import {
   formatDisplayDateWib,
@@ -126,6 +128,7 @@ export function TaskDetailContent({
   const [showUploadDropzone, setShowUploadDropzone] = useState(false);
   const [dueDateDraft, setDueDateDraft] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [revisionDialogOpen, setRevisionDialogOpen] = useState(false);
   const [revisionNotes, setRevisionNotes] = useState("");
@@ -395,16 +398,23 @@ export function TaskDetailContent({
             <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-mono text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
               {task.taskCode}
             </span>
-            <Link
-              href={`/projects/${task.projectId}`}
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-bold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-            >
-              <span
-                className="size-2 rounded-full"
-                style={{ backgroundColor: task.project.colorHex }}
-              />
-              <span>{task.project.code}</span>
-            </Link>
+            {task.project ? (
+              <Link
+                href={`/projects/${task.project.id}`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-bold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                <span
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: task.project.colorHex }}
+                />
+                <span>{task.project.code}</span>
+              </Link>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <span className="size-2 rounded-full bg-slate-400" />
+                <span>Tanpa Proyek (Umum)</span>
+              </span>
+            )}
             <StatusBadge domain="taskType" value={task.taskType} />
             {task.revisionCount > 0 ? (
               <Badge
@@ -416,18 +426,32 @@ export function TaskDetailContent({
             ) : null}
           </div>
 
-          {permissions.canDelete ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setDeleteDialogOpen(true)}
-              className="text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-500/15 dark:hover:text-rose-400"
-              aria-label="Hapus task"
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          ) : null}
+          <div className="flex items-center gap-1">
+            {permissions.canEdit ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setEditDialogOpen(true)}
+                className="text-slate-500 hover:bg-blue-50 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-blue-500/15 dark:hover:text-blue-400"
+                aria-label="Edit task"
+              >
+                <Pencil className="size-4" />
+              </Button>
+            ) : null}
+            {permissions.canDelete ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setDeleteDialogOpen(true)}
+                className="text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-500/15 dark:hover:text-rose-400"
+                aria-label="Hapus task"
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         <h3 className="mt-3 break-words text-lg leading-snug font-extrabold tracking-tight text-slate-900 dark:text-white">
@@ -1017,6 +1041,18 @@ export function TaskDetailContent({
           </form>
         </DialogContent>
       </Dialog>
+
+      {permissions.canEdit ? (
+        <TaskCreateDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          projects={detailQuery.data?.formOptions?.projects ?? []}
+          assignees={detailQuery.data?.formOptions?.assignees ?? []}
+          canAssignOthers={permissions.canAssign}
+          editTask={task}
+          onUpdated={() => invalidateTaskQueries()}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={deleteDialogOpen}

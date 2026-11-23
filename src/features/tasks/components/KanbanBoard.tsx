@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { softDeleteTaskAction } from "@/features/tasks/actions/task.actions";
 import {
   closestCorners,
   DndContext,
@@ -74,6 +79,8 @@ export interface KanbanBoardProps {
   assignees: AssigneeWorkloadOption[];
   currentUserId: string;
   canCreateTask: boolean;
+  canEditTask?: boolean;
+  canDeleteTask?: boolean;
   canAssignTask: boolean;
 }
 
@@ -90,8 +97,12 @@ export function KanbanBoard({
   assignees,
   currentUserId,
   canCreateTask,
+  canEditTask = false,
+  canDeleteTask = false,
   canAssignTask,
 }: KanbanBoardProps) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const openDrawer = useUIStore((s) => s.openDrawer);
   const { filters, setFilters, hasActiveFilters, resetFilters } =
     useTaskBoardFilters();
@@ -101,6 +112,11 @@ export function KanbanBoard({
 
   const [activeTask, setActiveTask] = useState<TaskBoardCardDto | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskBoardCardDto | null>(null);
+  const [deletingTask, setDeletingTask] = useState<TaskBoardCardDto | null>(
+    null
+  );
+  const [isDeleting, setIsDeleting] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<
     "BACKLOG" | "TODO" | "IN_PROGRESS"
   >("TODO");
@@ -267,6 +283,29 @@ export function KanbanBoard({
     setRevisionNotes("");
   };
 
+  const handleConfirmDeleteTask = async () => {
+    if (!deletingTask) return;
+    setIsDeleting(true);
+    try {
+      const res = await softDeleteTaskAction({ taskId: deletingTask.id });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(res.message ?? `Task ${deletingTask.taskCode} dihapus.`);
+      void queryClient.invalidateQueries({ queryKey: ["kanban-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["slide-over-detail", "TASK_DETAIL", deletingTask.id],
+      });
+      setDeletingTask(null);
+      refreshBoard();
+      router.refresh();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Crisp Command Header */}
@@ -343,6 +382,7 @@ export function KanbanBoard({
               {(val: string | null) => {
                 const label = (() => {
                   if (!val || val === "ALL") return "Semua Proyek";
+                  if (val === "NONE") return "Tanpa Proyek (Umum)";
                   const p = projects.find((item) => item.id === val);
                   return p ? `${p.code} · ${p.name}` : "Proyek";
                 })();
@@ -352,6 +392,7 @@ export function KanbanBoard({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">Semua Proyek</SelectItem>
+            <SelectItem value="NONE">Tanpa Proyek (Umum)</SelectItem>
             {projects.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 <span className="inline-flex min-w-0 items-center gap-2">
@@ -513,12 +554,16 @@ export function KanbanBoard({
               status={status}
               tasks={board.columns[status]}
               canCreateHere={canCreateTask}
+              canEditTask={canEditTask}
+              canDeleteTask={canDeleteTask}
               onQuickCreate={(colStatus) => {
                 setCreateDefaultStatus(colStatus);
                 setCreateDialogOpen(true);
               }}
               onOpenDetail={(taskId) => openDrawer("TASK_DETAIL", taskId)}
               onQuickMoveStatus={handleQuickMoveStatus}
+              onEditTask={setEditingTask}
+              onDeleteTask={setDeletingTask}
             />
           ))}
         </div>
@@ -599,21 +644,49 @@ export function KanbanBoard({
         </DialogContent>
       </Dialog>
 
-      {canCreateTask ? (
+      {canCreateTask || canEditTask ? (
         <TaskCreateDialog
-          open={createDialogOpen}
-          onOpenChange={setCreateDialogOpen}
+          open={createDialogOpen || Boolean(editingTask)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCreateDialogOpen(false);
+              setEditingTask(null);
+            }
+          }}
           projects={projects}
           assignees={assignees}
           currentUserId={currentUserId}
           canAssignOthers={canAssignTask}
           defaultProjectId={
-            filters.projectId !== "ALL" ? filters.projectId : undefined
+            filters.projectId !== "ALL" && filters.projectId !== "NONE"
+              ? filters.projectId
+              : undefined
           }
           defaultStatus={createDefaultStatus}
-          onCreated={() => refreshBoard()}
+          editTask={editingTask}
+          onCreated={() => {
+            refreshBoard();
+            router.refresh();
+          }}
+          onUpdated={() => {
+            refreshBoard();
+            router.refresh();
+          }}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(deletingTask)}
+        onOpenChange={(open) => {
+          if (!open) setDeletingTask(null);
+        }}
+        title={`Hapus Task ${deletingTask?.taskCode ?? ""}?`}
+        description={`Task "${deletingTask?.title ?? ""}" akan dihapus dari papan Kanban dan tampilan aktif.`}
+        confirmLabel="Hapus Task"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDeleteTask}
+      />
     </div>
   );
 }

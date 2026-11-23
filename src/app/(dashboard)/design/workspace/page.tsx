@@ -5,7 +5,11 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { DesignWorkspaceList } from "@/features/social-design/components/DesignWorkspaceList";
 import { getSelectableOptionsForSocialDesign } from "@/features/social-design/queries/content.queries";
 import { getDesignWorkspaceBriefs } from "@/features/social-design/queries/design.queries";
-import { hasPermission, PERMISSIONS } from "@/lib/constants/permissions";
+import {
+  hasAnyPermission,
+  hasPermission,
+  PERMISSIONS,
+} from "@/lib/constants/permissions";
 import { getAuthContext } from "@/server/auth/rbac";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +66,11 @@ export default async function DesignWorkspacePage({
     PERMISSIONS.DESIGN_SUBMISSION_APPROVE,
     ctx.roleCode
   );
+  const canDeleteBriefs = hasAnyPermission(
+    ctx.permissions,
+    [PERMISSIONS.DESIGN_BRIEF_MANAGE, PERMISSIONS.SOCIAL_CONTENT_DELETE],
+    ctx.roleCode
+  );
 
   return (
     <div className="space-y-5">
@@ -100,6 +109,7 @@ export default async function DesignWorkspacePage({
         canManageBriefs={canManageBriefs}
         canSubmitDesign={canSubmitDesign}
         canApproveDesign={canApproveDesign}
+        canDeleteBriefs={canDeleteBriefs}
         initialBriefId={initialBriefId}
       />
     </div>

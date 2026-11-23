@@ -9,12 +9,13 @@ import { executeAuditedMutation } from "@/server/services/audit-logger";
 import { DomainError } from "@/types/action-result";
 import {
   createProjectSchema,
+  deleteProjectSchema,
   manageProjectMembersSchema,
   updateProjectSchema,
 } from "@/features/tasks/schemas/project.schema";
 import { parseDateOnlyUtc } from "@/features/tasks/utils/date-wib";
 
-function revalidateProjectRoutes(projectId?: string) {
+function revalidateProjectRoutes(projectId?: string | null) {
   revalidatePath("/projects");
   if (projectId) {
     revalidatePath(`/projects/${projectId}`);
@@ -472,6 +473,103 @@ export const manageProjectMembersAction = createProtectedAction({
         projectRole: upserted.projectRole,
       },
       message: `Anggota ${targetUser.fullName} berhasil diperbarui sebagai ${nextRole}.`,
+    };
+  },
+});
+
+export interface DeleteProjectResult {
+  id: string;
+  detachedTaskCount: number;
+}
+
+export const deleteProjectAction = createProtectedAction({
+  permission: PERMISSIONS.TASKS_PROJECT_DELETE,
+  schema: deleteProjectSchema,
+  handler: async ({
+    ctx,
+    input,
+  }): Promise<{ data: DeleteProjectResult; message: string }> => {
+    const deleted = await executeAuditedMutation(ctx, async (tx) => {
+      const existing = await tx.project.findFirst({
+        where: {
+          id: input.projectId,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          status: true,
+        },
+      });
+
+      if (!existing) {
+        throw new DomainError("NOT_FOUND", "Proyek tidak ditemukan.");
+      }
+
+      const detachedTaskCount = await tx.task.count({
+        where: {
+          projectId: existing.id,
+          deletedAt: null,
+        },
+      });
+
+      if (detachedTaskCount > 0) {
+        await tx.task.updateMany({
+          where: {
+            projectId: existing.id,
+            deletedAt: null,
+          },
+          data: {
+            projectId: null,
+          },
+        });
+      }
+
+      await tx.project.update({
+        where: { id: existing.id },
+        data: {
+          deletedAt: new Date(),
+        },
+      });
+
+      return {
+        result: {
+          id: existing.id,
+          code: existing.code,
+          name: existing.name,
+          detachedTaskCount,
+        },
+        audit: {
+          module: "TASKS",
+          action: "tasks:project:deleted",
+          entityType: "PROJECT",
+          entityId: existing.id,
+          summary: `Proyek ${existing.code} (${existing.name}) dihapus (${detachedTaskCount} task dilepas menjadi standalone)`,
+          oldValues: {
+            code: existing.code,
+            name: existing.name,
+            status: existing.status,
+          },
+          newValues: {
+            deletedAt: true,
+            detachedTaskCount,
+          },
+        },
+      };
+    });
+
+    revalidateProjectRoutes(deleted.id);
+
+    return {
+      data: {
+        id: deleted.id,
+        detachedTaskCount: deleted.detachedTaskCount,
+      },
+      message:
+        deleted.detachedTaskCount > 0
+          ? `Proyek "${deleted.name}" (${deleted.code}) dihapus. ${deleted.detachedTaskCount} task tetap dipertahankan sebagai task standalone.`
+          : `Proyek "${deleted.name}" (${deleted.code}) berhasil dihapus.`,
     };
   },
 });

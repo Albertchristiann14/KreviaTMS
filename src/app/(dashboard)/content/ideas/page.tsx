@@ -53,6 +53,11 @@ export default async function ContentIdeasPage() {
     PERMISSIONS.SOCIAL_CONTENT_MANAGE,
     ctx.roleCode
   );
+  const canDeleteContent = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.SOCIAL_CONTENT_DELETE,
+    ctx.roleCode
+  );
 
   return (
     <div className="space-y-5">
@@ -92,6 +97,7 @@ export default async function ContentIdeasPage() {
         canCreateIdea={canCreateIdea}
         canApproveIdea={canApproveIdea}
         canManageContent={canManageContent}
+        canDeleteContent={canDeleteContent}
       />
     </div>
   );

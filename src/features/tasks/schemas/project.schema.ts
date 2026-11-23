@@ -124,8 +124,13 @@ export const manageProjectMembersSchema = z
     }
   });
 
+export const deleteProjectSchema = z.object({
+  projectId: z.string().uuid("ID proyek tidak valid."),
+});
+
 export type CreateProjectInput = z.input<typeof createProjectSchema>;
 export type UpdateProjectInput = z.input<typeof updateProjectSchema>;
+export type DeleteProjectInput = z.input<typeof deleteProjectSchema>;
 export type ManageProjectMembersInput = z.input<
   typeof manageProjectMembersSchema
 >;

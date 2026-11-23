@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   Plus,
   ShieldCheck,
+  Trash2,
   UserCheck,
   Users,
   UserX,
@@ -38,7 +39,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { updateUserAction } from "@/features/system/actions/user.actions";
+import {
+  deleteUserAction,
+  updateUserAction,
+} from "@/features/system/actions/user.actions";
 import { ResetPasswordDialog } from "@/features/system/components/ResetPasswordDialog";
 import { UserFormDialog } from "@/features/system/components/UserFormDialog";
 import type {
@@ -110,6 +114,10 @@ export function UsersDataTable({
     null
   );
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<SystemUserRowDTO | null>(
+    null
+  );
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
 
   const filteredUsers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -178,6 +186,34 @@ export function UsersDataTable({
       router.refresh();
     } finally {
       setIsTogglingStatus(false);
+    }
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    if (!deleteTarget) return;
+    setIsDeletingUser(true);
+    try {
+      const res = await deleteUserAction({ userId: deleteTarget.id });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+
+      toast.success(res.message ?? "Akun pengguna berhasil dihapus.");
+      if (res.data.activeTasksWarning.length > 0) {
+        const taskCodes = res.data.activeTasksWarning
+          .slice(0, 4)
+          .map((t) => t.taskCode)
+          .join(", ");
+        toast.warning(
+          `Reassignment diperlukan: ${deleteTarget.fullName} masih memiliki ${res.data.activeTasksWarning.length} task aktif (${taskCodes}).`
+        );
+      }
+
+      setDeleteTarget(null);
+      router.refresh();
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -376,6 +412,14 @@ export function UsersDataTable({
                     </>
                   )}
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={isSelf}
+                  variant="destructive"
+                  onClick={() => setDeleteTarget(u)}
+                >
+                  <Trash2 className="size-3.5" />
+                  <span>Hapus Akun</span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -570,6 +614,23 @@ export function UsersDataTable({
         variant={toggleTarget?.isActive ? "destructive" : "default"}
         isLoading={isTogglingStatus}
         onConfirm={handleConfirmToggleActive}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        title={`Hapus Akun ${deleteTarget?.fullName ?? ""}?`}
+        description={
+          deleteTarget && deleteTarget.activeTaskCount > 0
+            ? `Akun akan dihapus dari direktori aktif dan sesi login langsung dicabut (riwayat audit & task tetap tersimpan). Catatan: masih ada ${deleteTarget.activeTaskCount} task aktif yang ditugaskan.`
+            : "Akun akan dihapus dari direktori aktif dan sesi login langsung dicabut. Riwayat audit, task, dan evaluasi sebelumnya tetap terjaga."
+        }
+        confirmLabel="Hapus Akun"
+        variant="destructive"
+        isLoading={isDeletingUser}
+        onConfirm={handleConfirmDeleteUser}
       />
     </div>
   );

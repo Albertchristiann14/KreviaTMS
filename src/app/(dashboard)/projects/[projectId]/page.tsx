@@ -48,6 +48,11 @@ export default async function ProjectDetailPage({
     PERMISSIONS.TASKS_PROJECT_UPDATE,
     ctx.roleCode
   );
+  const canDeleteProject = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_PROJECT_DELETE,
+    ctx.roleCode
+  );
   const canCreateTask = hasPermission(
     ctx.permissions,
     PERMISSIONS.TASKS_ITEM_CREATE,
@@ -58,6 +63,16 @@ export default async function ProjectDetailPage({
     PERMISSIONS.TASKS_ITEM_ASSIGN,
     ctx.roleCode
   );
+  const canEditTask = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_ITEM_UPDATE,
+    ctx.roleCode
+  );
+  const canDeleteTask = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.TASKS_ITEM_DELETE,
+    ctx.roleCode
+  );
 
   return (
     <ProjectDetailTabs
@@ -65,8 +80,11 @@ export default async function ProjectDetailPage({
       assignableUsers={assignableUsers}
       currentUserId={ctx.userId}
       canUpdateProject={canUpdateProject}
+      canDeleteProject={canDeleteProject}
       canCreateTask={canCreateTask}
       canAssignTask={canAssignTask}
+      canEditTask={canEditTask}
+      canDeleteTask={canDeleteTask}
     />
   );
 }

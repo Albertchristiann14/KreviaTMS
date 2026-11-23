@@ -48,6 +48,12 @@ export default async function ContentPlannerPage() {
     getSelectableOptionsForSocialDesign(),
   ]);
 
+  const canDeleteContent = hasPermission(
+    ctx.permissions,
+    PERMISSIONS.SOCIAL_CONTENT_DELETE,
+    ctx.roleCode
+  );
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -82,6 +88,7 @@ export default async function ContentPlannerPage() {
         creators={options.creators}
         designers={options.designers}
         currentUserId={ctx.userId}
+        canDeleteContent={canDeleteContent}
       />
     </div>
   );

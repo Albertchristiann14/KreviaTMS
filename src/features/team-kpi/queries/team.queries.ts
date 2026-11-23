@@ -97,6 +97,10 @@ export async function getTeamDirectoryData(
             deletedAt: null,
             assigneeId: { not: null },
             status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW", "REVISION"] },
+            OR: [
+              { projectId: null },
+              { project: { is: { deletedAt: null } } },
+            ],
           },
           select: {
             assigneeId: true,

@@ -18,11 +18,14 @@ import {
   MessageSquare,
   Palette,
   Paperclip,
+  Pencil,
   Plus,
   Send,
+  Trash2,
   User as UserIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { PriorityBadge } from "@/components/shared/PriorityBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -52,9 +55,11 @@ import {
   addTaskChecklistItemAction,
   addTaskCommentAction,
   moveKanbanTaskAction,
+  softDeleteTaskAction,
   toggleTaskChecklistAction,
 } from "@/features/tasks/actions/task.actions";
 import { getInitials } from "@/features/tasks/components/ProjectCard";
+import { TaskCreateDialog } from "@/features/tasks/components/TaskCreateDialog";
 import type {
   TaskAttachmentDto,
   TaskDetailApiResponse,
@@ -162,6 +167,8 @@ export function GlobalSlideOverHost() {
   const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<
     string | null
   >(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // Sync URL query params (?drawer=task&id=<uuid>) -> Zustand store when URL changes
   useEffect(() => {
@@ -392,6 +399,30 @@ export function GlobalSlideOverHost() {
     },
   });
 
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      const res = await softDeleteTaskAction({ taskId });
+      if (!res.success) {
+        throw new Error(res.error.message);
+      }
+      return res;
+    },
+    onSuccess: (res, taskId) => {
+      toast.success(res.message ?? "Task berhasil dihapus.");
+      setDeleteDialogOpen(false);
+      closeDrawer();
+      void queryClient.invalidateQueries({ queryKey: ["kanban-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["slide-over-detail", "TASK_DETAIL", taskId],
+      });
+      router.refresh();
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
   const handleOpenAttachment = async (att: TaskAttachmentDto) => {
     if (att.sourceType !== "UPLOAD" || !att.storageKey) {
       window.open(att.fileUrl, "_blank", "noopener,noreferrer");
@@ -458,26 +489,61 @@ export function GlobalSlideOverHost() {
           <>
             {/* High-Contrast Drawer Header */}
             <SheetHeader className="border-b border-slate-200 bg-white px-6 pt-5 pb-4 pr-12 dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-0.5 font-mono text-xs font-bold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300">
-                  <Icon className="size-3.5" />
-                  <span>
-                    {taskDetail?.taskCode ?? activeDrawer.id.slice(0, 8)}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-0.5 font-mono text-xs font-bold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300">
+                    <Icon className="size-3.5" />
+                    <span>
+                      {taskDetail?.taskCode ?? activeDrawer.id.slice(0, 8)}
+                    </span>
                   </span>
-                </span>
-                {taskDetail ? (
-                  <>
-                    <StatusBadge domain="task" value={taskDetail.status} />
-                    <PriorityBadge priority={taskDetail.priority} />
-                    {taskDetail.revisionCount > 0 ? (
-                      <Badge
+                  {taskDetail ? (
+                    <>
+                      <StatusBadge domain="task" value={taskDetail.status} />
+                      <PriorityBadge priority={taskDetail.priority} />
+                      {taskDetail.revisionCount > 0 ? (
+                        <Badge
+                          variant="outline"
+                          className="rounded-full border-rose-200 bg-rose-50 font-mono text-[11px] font-bold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
+                        >
+                          Rev #{taskDetail.revisionCount}
+                        </Badge>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+
+                {activeDrawer.type === "TASK_DETAIL" &&
+                taskDetail &&
+                taskPermissions ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    {taskPermissions.canEdit ? (
+                      <Button
+                        type="button"
                         variant="outline"
-                        className="rounded-full border-rose-200 bg-rose-50 font-mono text-[11px] font-bold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
+                        size="xs"
+                        onClick={() => setEditDialogOpen(true)}
+                        className="h-7 gap-1 rounded-lg border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                        aria-label="Edit task"
                       >
-                        Rev #{taskDetail.revisionCount}
-                      </Badge>
+                        <Pencil className="size-3" />
+                        <span>Edit</span>
+                      </Button>
                     ) : null}
-                  </>
+                    {taskPermissions.canDelete ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        onClick={() => setDeleteDialogOpen(true)}
+                        className="h-7 gap-1 rounded-lg border-rose-200 bg-rose-50/80 px-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
+                        aria-label="Hapus task"
+                      >
+                        <Trash2 className="size-3" />
+                        <span>Hapus</span>
+                      </Button>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
 
@@ -486,7 +552,9 @@ export function GlobalSlideOverHost() {
               </SheetTitle>
               <SheetDescription className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                 {taskDetail
-                  ? `${taskDetail.project.code} · ${taskDetail.project.name}`
+                  ? taskDetail.project
+                    ? `${taskDetail.project.code} · ${taskDetail.project.name}`
+                    : "Tanpa Proyek (Umum)"
                   : meta.subtitle}
               </SheetDescription>
             </SheetHeader>
@@ -688,21 +756,28 @@ export function GlobalSlideOverHost() {
                       <p className="text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400">
                         Project
                       </p>
-                      <Link
-                        href={`/projects/${taskDetail.project.id}`}
-                        className="inline-flex items-center gap-1.5 font-bold text-slate-900 hover:text-blue-600 hover:underline dark:text-white dark:hover:text-blue-400"
-                      >
-                        <span
-                          className="size-2.5 shrink-0 rounded-full"
-                          style={{
-                            backgroundColor: taskDetail.project.colorHex,
-                          }}
-                        />
-                        <span className="truncate">
-                          {taskDetail.project.code} · {taskDetail.project.name}
+                      {taskDetail.project ? (
+                        <Link
+                          href={`/projects/${taskDetail.project.id}`}
+                          className="inline-flex items-center gap-1.5 font-bold text-slate-900 hover:text-blue-600 hover:underline dark:text-white dark:hover:text-blue-400"
+                        >
+                          <span
+                            className="size-2.5 shrink-0 rounded-full"
+                            style={{
+                              backgroundColor: taskDetail.project.colorHex,
+                            }}
+                          />
+                          <span className="truncate">
+                            {taskDetail.project.code} · {taskDetail.project.name}
+                          </span>
+                          <FolderKanban className="size-3.5 shrink-0 text-slate-400" />
+                        </Link>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                          <span className="size-2 shrink-0 rounded-full bg-slate-400" />
+                          <span>Tanpa Proyek (Umum)</span>
                         </span>
-                        <FolderKanban className="size-3.5 shrink-0 text-slate-400" />
-                      </Link>
+                      )}
                     </div>
 
                     <div className="space-y-1.5 rounded-xl border border-slate-200/70 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-800/50">
@@ -1180,6 +1255,33 @@ export function GlobalSlideOverHost() {
           </>
         ) : null}
       </SheetContent>
+
+      {taskDetail && taskPermissions?.canEdit ? (
+        <TaskCreateDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          projects={taskQuery.data?.formOptions?.projects ?? []}
+          assignees={taskQuery.data?.formOptions?.assignees ?? []}
+          canAssignOthers={taskPermissions.canAssign}
+          editTask={taskDetail}
+          onUpdated={() => void invalidateTaskRelatedQueries()}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title={`Hapus Task ${taskDetail?.taskCode ?? ""}?`}
+        description={`Task "${taskDetail?.title ?? ""}" akan dihapus dari tampilan aktif.`}
+        confirmLabel="Hapus Task"
+        variant="destructive"
+        isLoading={deleteTaskMutation.isPending}
+        onConfirm={() => {
+          if (taskDetail) {
+            deleteTaskMutation.mutate(taskDetail.id);
+          }
+        }}
+      />
     </Sheet>
   );
 }

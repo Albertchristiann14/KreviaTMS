@@ -71,9 +71,7 @@ async function runDeadlineAlertsCron(request: Request) {
         status: {
           notIn: [TaskStatus.DONE, TaskStatus.CANCELLED],
         },
-        project: {
-          deletedAt: null,
-        },
+        OR: [{ projectId: null }, { project: { is: { deletedAt: null } } }],
       },
       select: {
         id: true,
@@ -100,6 +98,7 @@ async function runDeadlineAlertsCron(request: Request) {
       const dayDiff = diffWibDays(task.dueDate, now);
       const dueLabel = formatDisplayDateWib(task.dueDate, "datetime");
       const actionUrl = `/tasks/board?drawer=task&id=${task.id}`;
+      const projectCodeLabel = task.project?.code ?? "Umum";
 
       if (dayDiff === 2) {
         const alertKey = `${task.id}:H-2:${todayWib}:${task.assigneeId}`;
@@ -109,7 +108,7 @@ async function runDeadlineAlertsCron(request: Request) {
             recipientId: task.assigneeId,
             type: NotificationType.TASK_DEADLINE_SOON,
             title: `Pengingat H-2 Deadline: ${task.taskCode}`,
-            message: `Task "${task.title}" (${task.project.code}) akan jatuh tempo dalam 2 hari (${dueLabel}).`,
+            message: `Task "${task.title}" (${projectCodeLabel}) akan jatuh tempo dalam 2 hari (${dueLabel}).`,
             entityType: "TASK",
             entityId: task.id,
             actionUrl,
@@ -129,7 +128,7 @@ async function runDeadlineAlertsCron(request: Request) {
             recipientId: task.assigneeId,
             type: NotificationType.TASK_DEADLINE_TODAY,
             title: `Deadline Hari Ini: ${task.taskCode}`,
-            message: `Task "${task.title}" (${task.project.code}) jatuh tempo hari ini (${dueLabel}).`,
+            message: `Task "${task.title}" (${projectCodeLabel}) jatuh tempo hari ini (${dueLabel}).`,
             entityType: "TASK",
             entityId: task.id,
             actionUrl,
@@ -145,13 +144,14 @@ async function runDeadlineAlertsCron(request: Request) {
         const stage = dayDiff === -1 ? "H+1" : "H+3";
         const overdueDays = Math.abs(dayDiff);
         const recipients = new Set<string>([task.assigneeId]);
-        if (task.project.ownerId) {
+        if (task.project?.ownerId) {
           recipients.add(task.project.ownerId);
         }
 
         for (const recipientId of recipients) {
           const isManagerEscalation =
-            recipientId !== task.assigneeId && recipientId === task.project.ownerId;
+            recipientId !== task.assigneeId &&
+            recipientId === task.project?.ownerId;
           const alertKey = `${task.id}:${stage}:${todayWib}:${recipientId}`;
 
           candidates.push({
@@ -163,8 +163,8 @@ async function runDeadlineAlertsCron(request: Request) {
                 ? `Eskalasi Overdue ${stage}: ${task.taskCode}`
                 : `Task Terlambat (${stage}): ${task.taskCode}`,
               message: isManagerEscalation
-                ? `Task "${task.title}" di proyek ${task.project.code} telah melewati tenggat ${overdueDays} hari (${dueLabel}).`
-                : `Task "${task.title}" (${task.project.code}) telah melewati batas waktu ${overdueDays} hari (${dueLabel}). Segera selesaikan atau koordinasikan dengan PM.`,
+                ? `Task "${task.title}" di proyek ${projectCodeLabel} telah melewati tenggat ${overdueDays} hari (${dueLabel}).`
+                : `Task "${task.title}" (${projectCodeLabel}) telah melewati batas waktu ${overdueDays} hari (${dueLabel}). Segera selesaikan atau koordinasikan dengan PM.`,
               entityType: "TASK",
               entityId: task.id,
               actionUrl,

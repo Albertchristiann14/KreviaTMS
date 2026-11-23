@@ -10,6 +10,7 @@ import { DomainError } from "@/types/action-result";
 import {
   assignKpiMonthlySchema,
   clonePreviousMonthAssignmentsSchema,
+  deleteKpiTemplateSchema,
   toggleKpiTemplateActiveSchema,
   upsertKpiTemplateSchema,
 } from "@/features/team-kpi/schemas/kpi-template.schema";
@@ -214,6 +215,64 @@ export const toggleKpiTemplateActiveAction = createProtectedAction({
       message: updated.isActive
         ? "Template KPI diaktifkan."
         : "Template KPI dinonaktifkan.",
+    };
+  },
+});
+
+export const deleteKpiTemplateAction = createProtectedAction({
+  permission: PERMISSIONS.KPI_TEMPLATE_MANAGE,
+  schema: deleteKpiTemplateSchema,
+  handler: async ({ ctx, input }) => {
+    const deleted = await executeAuditedMutation(ctx, async (tx) => {
+      const existing = await tx.kpiTemplate.findFirst({
+        where: { id: input.templateId, deletedAt: null },
+      });
+      if (!existing) {
+        throw new DomainError("NOT_FOUND", "Template KPI tidak ditemukan.");
+      }
+
+      const now = new Date();
+      const next = await tx.kpiTemplate.update({
+        where: { id: existing.id },
+        data: {
+          deletedAt: now,
+          isActive: false,
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          deletedAt: true,
+        },
+      });
+
+      return {
+        result: { id: next.id, code: next.code, name: next.name },
+        audit: {
+          module: "TEAM_KPI" as const,
+          action: "KPI_TEMPLATE_DELETED",
+          entityType: "KPI_TEMPLATE",
+          entityId: next.id,
+          summary: `Template KPI ${next.code} (${next.name}) dihapus (soft-delete).`,
+          oldValues: {
+            code: existing.code,
+            name: existing.name,
+            isActive: existing.isActive,
+            deletedAt: null,
+          },
+          newValues: {
+            isActive: false,
+            deletedAt: next.deletedAt?.toISOString() ?? now.toISOString(),
+          },
+        },
+      };
+    });
+
+    revalidatePath("/kpi/templates");
+    revalidatePath("/kpi/evaluations");
+    return {
+      data: deleted,
+      message: `Template KPI ${deleted.code} berhasil dihapus.`,
     };
   },
 });

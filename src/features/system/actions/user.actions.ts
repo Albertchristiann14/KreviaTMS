@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { hash } from "@node-rs/argon2";
 import { NotificationType, TaskStatus } from "@prisma/client";
+import { z } from "zod";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { createProtectedAction } from "@/server/actions/safe-action";
 import { prisma } from "@/server/db/prisma";
@@ -499,6 +500,135 @@ export const resetUserPasswordAction = createProtectedAction({
         sessionRevoked: true,
       },
       message: `Kata sandi sementara untuk ${existing.fullName} berhasil diperbarui dan sesi aktif telah dicabut.`,
+    };
+  },
+});
+
+const deleteUserSchema = z.object({
+  userId: z.string().uuid("ID pengguna tidak valid."),
+});
+
+export const deleteUserAction = createProtectedAction({
+  permission: PERMISSIONS.SYSTEM_USER_MANAGE,
+  schema: deleteUserSchema,
+  handler: async ({ ctx, input }) => {
+    const existing = await prisma.user.findFirst({
+      where: { id: input.userId, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        isActive: true,
+        role: {
+          select: {
+            code: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new DomainError("NOT_FOUND", "Akun pengguna tidak ditemukan.");
+    }
+
+    if (existing.id === ctx.userId) {
+      throw new DomainError(
+        "CONFLICT",
+        "Anda tidak dapat menghapus akun Anda sendiri."
+      );
+    }
+
+    if (existing.role.code === "SUPER_ADMIN") {
+      const otherActiveAdminsCount = await prisma.user.count({
+        where: {
+          id: { not: existing.id },
+          deletedAt: null,
+          isActive: true,
+          role: { code: "SUPER_ADMIN" },
+        },
+      });
+
+      if (otherActiveAdminsCount < 1) {
+        throw new DomainError(
+          "CONFLICT",
+          "Operasi ditolak: sistem wajib memiliki minimal 1 akun SUPER_ADMIN aktif."
+        );
+      }
+    }
+
+    const activeTasksWarning: ActiveTaskBriefDTO[] = await prisma.task.findMany({
+      where: {
+        assigneeId: existing.id,
+        deletedAt: null,
+        status: { in: ACTIVE_TASK_STATUSES },
+      },
+      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      take: 25,
+      select: {
+        id: true,
+        taskCode: true,
+        title: true,
+        status: true,
+      },
+    });
+
+    const deleted = await executeAuditedMutation(ctx, async (tx) => {
+      const now = new Date();
+      const updated = await tx.user.update({
+        where: { id: existing.id },
+        data: {
+          deletedAt: now,
+          isActive: false,
+          tokenVersion: { increment: 1 },
+        },
+        select: {
+          id: true,
+          fullName: true,
+          deletedAt: true,
+        },
+      });
+
+      return {
+        result: updated,
+        audit: {
+          module: "SYSTEM" as const,
+          action: "system:user:deleted",
+          entityType: "USER",
+          entityId: existing.id,
+          summary: `${ctx.fullName} menghapus akun pengguna ${existing.fullName} (${existing.role.code})`,
+          oldValues: {
+            email: existing.email,
+            fullName: existing.fullName,
+            roleCode: existing.role.code,
+            isActive: existing.isActive,
+            deletedAt: null,
+          },
+          newValues: {
+            isActive: false,
+            deletedAt: updated.deletedAt?.toISOString() ?? now.toISOString(),
+            sessionRevoked: true,
+          },
+        },
+      };
+    });
+
+    revalidatePath("/system/users");
+    revalidatePath("/team");
+    revalidatePath(`/team/${existing.id}`);
+    revalidatePath("/");
+
+    const warningNote =
+      activeTasksWarning.length > 0
+        ? ` Catatan: user masih memiliki ${activeTasksWarning.length} task aktif yang perlu di-reassign.`
+        : "";
+
+    return {
+      data: {
+        id: deleted.id,
+        activeTasksWarning,
+      },
+      message: `Akun ${deleted.fullName} berhasil dihapus dan sesi login langsung dicabut.${warningNote}`,
     };
   },
 });

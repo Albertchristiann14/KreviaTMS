@@ -55,8 +55,8 @@ export async function getAssetsPaginated(params: {
       skip,
       take: limit,
       include: {
-        project: { select: { code: true, name: true } },
-        contentItem: { select: { title: true, platform: true } },
+        project: { select: { code: true, name: true, deletedAt: true } },
+        contentItem: { select: { title: true, platform: true, deletedAt: true } },
         designSubmission: {
           select: { designBriefId: true, versionNumber: true },
         },
@@ -77,36 +77,45 @@ export async function getAssetsPaginated(params: {
     }
   }
 
-  const items: AssetDTO[] = rows.map((row) => ({
-    id: row.id,
-    projectId: row.projectId,
-    projectCode: row.project?.code ?? null,
-    projectName: row.project?.name ?? null,
-    contentItemId: row.contentItemId,
-    contentTitle: row.contentItem?.title ?? null,
-    contentPlatform: row.contentItem?.platform ?? null,
-    designSubmissionId: row.designSubmissionId,
-    designBriefId: row.designSubmission?.designBriefId ?? null,
-    designVersionNumber: row.designSubmission?.versionNumber ?? null,
-    title: row.title,
-    description: row.description,
-    category: row.category,
-    sourceType: row.sourceType,
-    fileUrl: row.fileUrl,
-    storageKey: row.storageKey,
-    thumbnailUrl: row.thumbnailUrl,
-    mimeType: row.mimeType,
-    fileSizeBytes: row.fileSizeBytes != null ? Number(row.fileSizeBytes) : null,
-    tags: row.tags,
-    metadata: toMetadataRecord(row.metadata),
-    uploadedBy: row.uploadedBy,
-    uploaderName: row.uploader.fullName,
-    uploaderAvatarUrl: row.uploader.avatarUrl,
-    isApprovedBrandAsset: row.isApprovedBrandAsset,
-    isSuperseded: row.isSuperseded,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  }));
+  const items: AssetDTO[] = rows.map((row) => {
+    const activeProject =
+      row.project && row.project.deletedAt === null ? row.project : null;
+    const activeContent =
+      row.contentItem && row.contentItem.deletedAt === null
+        ? row.contentItem
+        : null;
+
+    return {
+      id: row.id,
+      projectId: activeProject ? row.projectId : null,
+      projectCode: activeProject?.code ?? null,
+      projectName: activeProject?.name ?? null,
+      contentItemId: activeContent ? row.contentItemId : null,
+      contentTitle: activeContent?.title ?? null,
+      contentPlatform: activeContent?.platform ?? null,
+      designSubmissionId: row.designSubmissionId,
+      designBriefId: row.designSubmission?.designBriefId ?? null,
+      designVersionNumber: row.designSubmission?.versionNumber ?? null,
+      title: row.title,
+      description: row.description,
+      category: row.category,
+      sourceType: row.sourceType,
+      fileUrl: row.fileUrl,
+      storageKey: row.storageKey,
+      thumbnailUrl: row.thumbnailUrl,
+      mimeType: row.mimeType,
+      fileSizeBytes: row.fileSizeBytes != null ? Number(row.fileSizeBytes) : null,
+      tags: row.tags,
+      metadata: toMetadataRecord(row.metadata),
+      uploadedBy: row.uploadedBy,
+      uploaderName: row.uploader.fullName,
+      uploaderAvatarUrl: row.uploader.avatarUrl,
+      isApprovedBrandAsset: row.isApprovedBrandAsset,
+      isSuperseded: row.isSuperseded,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  });
 
   return {
     items,

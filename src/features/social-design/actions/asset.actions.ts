@@ -228,6 +228,7 @@ export const archiveAssetAction = createProtectedAction({
     });
 
     revalidatePath("/assets");
+    revalidatePath("/");
     return {
       data,
       message: "Aset berhasil diarsipkan dari Asset Library.",

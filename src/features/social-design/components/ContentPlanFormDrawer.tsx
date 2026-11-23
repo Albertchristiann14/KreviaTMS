@@ -2,8 +2,17 @@
 
 import { useMemo, useState, useTransition } from "react";
 import type { ContentFormat, SocialPlatform } from "@prisma/client";
-import { Calendar, Loader2, Palette, Plus, Sparkles, X } from "lucide-react";
+import {
+  Calendar,
+  Loader2,
+  Palette,
+  Plus,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { convertIdeaToPlanAction } from "@/features/social-design/actions/content-idea.actions";
 import {
   createContentPlanAction,
+  deleteContentPlanAction,
   updateContentPlanAction,
 } from "@/features/social-design/actions/content-plan.actions";
 import { ChannelPill } from "@/features/social-design/components/StudioPrimitives";
@@ -61,6 +71,7 @@ export interface ContentPlanFormDrawerProps {
   currentUserId: string;
   editingItem?: ContentPlanItemDTO | null;
   promotingIdea?: ContentIdeaDTO | null;
+  canDelete?: boolean;
   onSuccess?: () => void;
 }
 
@@ -91,10 +102,13 @@ function ContentPlanFormDrawerBody({
   currentUserId,
   editingItem = null,
   promotingIdea = null,
+  canDelete = false,
   onSuccess,
 }: Omit<ContentPlanFormDrawerProps, "open">) {
   const [isPending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const isEditMode = Boolean(editingItem);
   const isPromoteMode = Boolean(promotingIdea && !editingItem);
@@ -411,6 +425,28 @@ function ContentPlanFormDrawerBody({
         toast.error(msg);
       }
     });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!editingItem) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteContentPlanAction({
+        contentItemId: editingItem.id,
+      });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(res.message ?? "Content plan berhasil dihapus.");
+      setDeleteDialogOpen(false);
+      onSuccess?.();
+      onOpenChange(false);
+    } catch {
+      toast.error("Gagal menghapus Content Plan.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -875,29 +911,60 @@ function ContentPlanFormDrawerBody({
           ) : null}
         </div>
 
-        <SheetFooter className="border-t border-border/70 bg-background/85 px-6 py-4 backdrop-blur-md sm:flex-row sm:justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
-            Batal
-          </Button>
-          <Button type="submit" disabled={isPending}>
-            {isPending ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                <span>Menyimpan...</span>
-              </>
-            ) : isEditMode ? (
-              "Simpan Perubahan"
-            ) : (
-              "Simpan & Buat Task"
-            )}
-          </Button>
+        <SheetFooter
+          className={cn(
+            "border-t border-border/70 bg-background/85 px-6 py-4 backdrop-blur-md sm:flex-row",
+            isEditMode && canDelete ? "sm:justify-between" : "sm:justify-end"
+          )}
+        >
+          {isEditMode && editingItem && canDelete ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(true)}
+              disabled={isPending || isDeleting}
+              className="gap-1.5 border-rose-200 text-destructive hover:bg-rose-50 hover:text-destructive dark:border-rose-500/30 dark:hover:bg-rose-950/50"
+            >
+              <Trash2 className="size-4" />
+              <span>Hapus Plan</span>
+            </Button>
+          ) : null}
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isPending || isDeleting}
+            >
+              Batal
+            </Button>
+            <Button type="submit" disabled={isPending || isDeleting}>
+              {isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  <span>Menyimpan...</span>
+                </>
+              ) : isEditMode ? (
+                "Simpan Perubahan"
+              ) : (
+                "Simpan & Buat Task"
+              )}
+            </Button>
+          </div>
         </SheetFooter>
       </form>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Hapus Content Plan?"
+        description={`Content Plan "${editingItem?.title ?? ""}" akan dihapus. Task produksi terkait akan dilepas sebagai task umum (tidak ikut terhapus), dan Design Brief yang ada tetap tersimpan terpisah.`}
+        confirmLabel="Hapus Content Plan"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   );
 }
@@ -911,6 +978,7 @@ export function ContentPlanFormDrawer({
   currentUserId,
   editingItem = null,
   promotingIdea = null,
+  canDelete = false,
   onSuccess,
 }: ContentPlanFormDrawerProps) {
   const formKey = editingItem?.id ?? promotingIdea?.id ?? "new";
@@ -931,6 +999,7 @@ export function ContentPlanFormDrawer({
             currentUserId={currentUserId}
             editingItem={editingItem}
             promotingIdea={promotingIdea}
+            canDelete={canDelete}
             onSuccess={onSuccess}
           />
         ) : null}

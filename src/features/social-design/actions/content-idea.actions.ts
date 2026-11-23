@@ -9,12 +9,17 @@ import {
 import {
   convertIdeaToPlanSchema,
   createContentIdeaSchema,
+  deleteContentIdeaSchema,
   reviewContentIdeaSchema,
   toggleIdeaUpvoteSchema,
 } from "@/features/social-design/schemas/content.schema";
 import { createContentPlanAtomic } from "@/features/social-design/services/content-workflow.service";
 import type { CreateContentPlanOutput } from "@/features/social-design/types";
-import { hasPermission, PERMISSIONS } from "@/lib/constants/permissions";
+import {
+  hasAnyPermission,
+  hasPermission,
+  PERMISSIONS,
+} from "@/lib/constants/permissions";
 import { createProtectedAction } from "@/server/actions/safe-action";
 import { prisma } from "@/server/db/prisma";
 import { executeAuditedMutation } from "@/server/services/audit-logger";
@@ -320,6 +325,89 @@ export const convertIdeaToPlanAction = createProtectedAction({
     return {
       data: output,
       message: `Ide dipromosikan ke Content Plan dan ${output.spawnedTasks.length} task otomatis dibuat.`,
+    };
+  },
+});
+
+export const deleteContentIdeaAction = createProtectedAction({
+  permission: null,
+  schema: deleteContentIdeaSchema,
+  handler: async ({ ctx, input }) => {
+    if (
+      !hasAnyPermission(
+        ctx.permissions,
+        [PERMISSIONS.SOCIAL_IDEA_CREATE, PERMISSIONS.SOCIAL_CONTENT_DELETE],
+        ctx.roleCode
+      )
+    ) {
+      throw new DomainError(
+        "FORBIDDEN",
+        "Anda tidak memiliki izin untuk menghapus ide konten."
+      );
+    }
+
+    const data = await executeAuditedMutation(ctx, async (tx) => {
+      const existing = await tx.contentIdea.findFirst({
+        where: { id: input.ideaId, deletedAt: null },
+      });
+
+      if (!existing) {
+        throw new DomainError("NOT_FOUND", "Ide konten tidak ditemukan.");
+      }
+
+      const canDeleteAny = hasPermission(
+        ctx.permissions,
+        PERMISSIONS.SOCIAL_CONTENT_DELETE,
+        ctx.roleCode
+      );
+      const canDeleteOwnDraft =
+        existing.proposedBy === ctx.userId &&
+        existing.status === ContentIdeaStatus.IDEA &&
+        hasPermission(
+          ctx.permissions,
+          PERMISSIONS.SOCIAL_IDEA_CREATE,
+          ctx.roleCode
+        );
+
+      if (!canDeleteAny && !canDeleteOwnDraft) {
+        throw new DomainError(
+          "FORBIDDEN",
+          "Anda hanya dapat menghapus ide Anda sendiri yang masih berstatus Kurasi (IDEA), atau memerlukan izin social:content:delete."
+        );
+      }
+
+      const now = new Date();
+      await tx.contentIdea.update({
+        where: { id: existing.id },
+        data: { deletedAt: now },
+      });
+
+      return {
+        result: { id: existing.id, deletedAt: now.toISOString() },
+        audit: {
+          module: "SOCIAL_DESIGN" as const,
+          action: "social:idea:deleted",
+          entityType: "CONTENT_IDEA",
+          entityId: existing.id,
+          summary: `Ide konten dihapus: ${existing.title}`,
+          oldValues: {
+            status: existing.status,
+            deletedAt: null,
+          },
+          newValues: {
+            deletedAt: now.toISOString(),
+          },
+        },
+      };
+    });
+
+    revalidatePath("/content/ideas");
+    revalidatePath("/content/planner");
+    revalidatePath("/");
+
+    return {
+      data,
+      message: "Ide konten berhasil dihapus.",
     };
   },
 });

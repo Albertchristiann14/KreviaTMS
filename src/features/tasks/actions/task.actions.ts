@@ -42,6 +42,7 @@ import {
   spawnLinkedTask,
 } from "@/features/tasks/services/task.service";
 import {
+  ACTIVE_OR_STANDALONE_PROJECT_WHERE,
   mapTaskRowToBoardCardDto,
   TASK_BOARD_CARD_SELECT,
 } from "@/features/tasks/queries/task-mappers";
@@ -56,7 +57,7 @@ import {
   parseDueDateWib,
 } from "@/features/tasks/utils/date-wib";
 
-function revalidateTaskRoutes(projectId?: string) {
+function revalidateTaskRoutes(projectId?: string | null) {
   revalidatePath("/tasks/board");
   revalidatePath("/tasks/my-tasks");
   revalidatePath("/tasks/calendar");
@@ -124,48 +125,61 @@ export const createTaskAction = createProtectedAction({
   permission: PERMISSIONS.TASKS_ITEM_CREATE,
   schema: createTaskSchema,
   handler: async ({ ctx, input }) => {
-    const project = await prisma.project.findFirst({
-      where: {
-        id: input.projectId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        status: true,
-        ownerId: true,
-        members: {
-          where: { userId: ctx.userId },
-          select: { userId: true },
-        },
-      },
-    });
-
-    if (!project) {
-      throw new DomainError("NOT_FOUND", "Proyek tidak ditemukan.");
-    }
-
-    if (project.status === ProjectStatus.ARCHIVED) {
-      throw new DomainError(
-        "INVALID_STATE_TRANSITION",
-        "Tidak dapat membuat task baru pada proyek yang sudah diarsipkan."
-      );
-    }
-
     const canAssignOthers = hasPermission(
       ctx.permissions,
       PERMISSIONS.TASKS_ITEM_ASSIGN,
       ctx.roleCode
     );
-    const isProjectParticipant =
-      project.ownerId === ctx.userId || project.members.length > 0;
+    const targetProjectId = input.projectId || null;
 
-    if (!canAssignOthers && !isProjectParticipant) {
-      throw new DomainError(
-        "FORBIDDEN",
-        "Anda hanya dapat membuat task pada proyek yang Anda ikuti."
-      );
+    let project: {
+      id: string;
+      code: string;
+      name: string;
+      status: ProjectStatus;
+      ownerId: string;
+      members: Array<{ userId: string }>;
+    } | null = null;
+
+    if (targetProjectId) {
+      project = await prisma.project.findFirst({
+        where: {
+          id: targetProjectId,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          status: true,
+          ownerId: true,
+          members: {
+            where: { userId: ctx.userId },
+            select: { userId: true },
+          },
+        },
+      });
+
+      if (!project) {
+        throw new DomainError("NOT_FOUND", "Proyek tidak ditemukan.");
+      }
+
+      if (project.status === ProjectStatus.ARCHIVED) {
+        throw new DomainError(
+          "INVALID_STATE_TRANSITION",
+          "Tidak dapat membuat task baru pada proyek yang sudah diarsipkan."
+        );
+      }
+
+      const isProjectParticipant =
+        project.ownerId === ctx.userId || project.members.length > 0;
+
+      if (!canAssignOthers && !isProjectParticipant) {
+        throw new DomainError(
+          "FORBIDDEN",
+          "Anda hanya dapat membuat task pada proyek yang Anda ikuti."
+        );
+      }
     }
 
     const targetAssigneeId = input.assigneeId ?? null;
@@ -217,7 +231,7 @@ export const createTaskAction = createProtectedAction({
         );
       }
     } else if (input.requiresReview) {
-      resolvedReviewerId = project.ownerId;
+      resolvedReviewerId = project ? project.ownerId : ctx.userId;
     }
 
     const parsedDueDate = parseDueDateWib(input.dueDate);
@@ -234,7 +248,7 @@ export const createTaskAction = createProtectedAction({
     const createdCard = await prisma.$transaction(
       async (tx) => {
         const created = await spawnLinkedTask(tx, {
-          projectId: project.id,
+          projectId: project?.id ?? null,
           title: input.title,
           description: input.description ?? null,
           taskType: input.taskType as TaskType,
@@ -277,7 +291,7 @@ export const createTaskAction = createProtectedAction({
       { maxWait: 10_000, timeout: 25_000 }
     );
 
-    revalidateTaskRoutes(project.id);
+    revalidateTaskRoutes(project?.id ?? null);
 
     return {
       data: createdCard,
@@ -294,7 +308,7 @@ export const updateTaskAction = createProtectedAction({
       where: {
         id: input.taskId,
         deletedAt: null,
-        project: { deletedAt: null },
+        ...ACTIVE_OR_STANDALONE_PROJECT_WHERE,
       },
       select: {
         id: true,
@@ -426,6 +440,50 @@ export const updateTaskAction = createProtectedAction({
       input.assigneeId !== undefined ? input.assigneeId : existing.assigneeId;
     const nextReviewerId =
       input.reviewerId !== undefined ? input.reviewerId : existing.reviewerId;
+    const nextProjectId =
+      input.projectId !== undefined
+        ? input.projectId || null
+        : existing.projectId;
+    const isChangingProject = nextProjectId !== existing.projectId;
+
+    if (isChangingProject && nextProjectId !== null) {
+      const targetProject = await prisma.project.findFirst({
+        where: {
+          id: nextProjectId,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          status: true,
+          ownerId: true,
+          members: {
+            where: { userId: ctx.userId },
+            select: { userId: true },
+          },
+        },
+      });
+
+      if (!targetProject) {
+        throw new DomainError("NOT_FOUND", "Proyek tujuan tidak ditemukan.");
+      }
+
+      if (targetProject.status === ProjectStatus.ARCHIVED) {
+        throw new DomainError(
+          "INVALID_STATE_TRANSITION",
+          "Tidak dapat memindahkan task ke proyek yang sudah diarsipkan."
+        );
+      }
+
+      const isTargetParticipant =
+        targetProject.ownerId === ctx.userId ||
+        targetProject.members.length > 0;
+      if (!canAssign && !canApprove && !isTargetParticipant) {
+        throw new DomainError(
+          "FORBIDDEN",
+          "Anda hanya dapat memindahkan task ke proyek yang Anda ikuti."
+        );
+      }
+    }
 
     let nextIsOnTime: boolean | null | undefined = undefined;
     if (dueDateChanged && existing.status === TaskStatus.DONE && existing.completedAt) {
@@ -450,6 +508,7 @@ export const updateTaskAction = createProtectedAction({
       const res = await tx.task.updateMany({
         where: whereLock,
         data: {
+          projectId: nextProjectId,
           title: input.title ?? existing.title,
           description:
             input.description !== undefined
@@ -557,12 +616,14 @@ export const updateTaskAction = createProtectedAction({
           entityId: existing.id,
           summary: `Task ${existing.taskCode} diperbarui`,
           oldValues: {
+            projectId: existing.projectId,
             title: existing.title,
             priority: existing.priority,
             assigneeId: existing.assigneeId,
             dueDate: existing.dueDate?.toISOString() ?? null,
           },
           newValues: {
+            projectId: nextProjectId,
             title: refreshed.title,
             priority: refreshed.priority,
             assigneeId: nextAssigneeId,
@@ -574,7 +635,10 @@ export const updateTaskAction = createProtectedAction({
       };
     });
 
-    revalidateTaskRoutes(existing.projectId);
+    revalidateTaskRoutes(existing.projectId ?? undefined);
+    if (isChangingProject && nextProjectId) {
+      revalidateTaskRoutes(nextProjectId);
+    }
 
     return {
       data: updatedCard,
@@ -593,7 +657,7 @@ export const moveKanbanTaskAction = createProtectedAction({
       where: {
         id: input.taskId,
         deletedAt: null,
-        project: { deletedAt: null },
+        ...ACTIVE_OR_STANDALONE_PROJECT_WHERE,
       },
       select: {
         id: true,
@@ -810,7 +874,7 @@ export const moveKanbanTaskAction = createProtectedAction({
 
       const resolvedPosition = hasNeighborHint
         ? await resolveKanbanTargetPosition(tx, {
-            projectId: existing.projectId,
+            projectId: existing.projectId ?? null,
             status: targetStatus,
             prevTaskId: input.prevTaskId ?? null,
             nextTaskId: input.nextTaskId ?? null,
@@ -820,7 +884,7 @@ export const moveKanbanTaskAction = createProtectedAction({
         : input.targetPosition !== undefined
           ? input.targetPosition
           : await resolveKanbanTargetPosition(tx, {
-              projectId: existing.projectId,
+              projectId: existing.projectId ?? null,
               status: targetStatus,
             });
 
@@ -886,7 +950,9 @@ export const moveKanbanTaskAction = createProtectedAction({
       if (!isSameColumnReorder) {
         if (targetStatus === TaskStatus.IN_REVIEW) {
           const reviewerTarget =
-            existing.reviewerId ?? existing.project.ownerId;
+            existing.reviewerId ??
+            existing.project?.ownerId ??
+            existing.reporterId;
           if (reviewerTarget) {
             notifications.push({
               recipientId: reviewerTarget,
@@ -968,7 +1034,7 @@ export const moveKanbanTaskAction = createProtectedAction({
       };
     });
 
-    revalidateTaskRoutes(existing.projectId);
+    revalidateTaskRoutes(existing.projectId ?? undefined);
 
     return {
       data: movedCard,
@@ -1025,8 +1091,8 @@ export const toggleTaskChecklistAction = createProtectedAction({
     const isTaskParticipant =
       checklist.task.assigneeId === ctx.userId ||
       checklist.task.reporterId === ctx.userId ||
-      checklist.task.project.ownerId === ctx.userId ||
-      checklist.task.project.members.length > 0;
+      checklist.task.project?.ownerId === ctx.userId ||
+      (checklist.task.project?.members.length ?? 0) > 0;
 
     if (!canManage && !isTaskParticipant) {
       throw new DomainError(
@@ -1103,7 +1169,7 @@ export const addTaskChecklistItemAction = createProtectedAction({
       where: {
         id: input.taskId,
         deletedAt: null,
-        project: { deletedAt: null },
+        ...ACTIVE_OR_STANDALONE_PROJECT_WHERE,
       },
       select: {
         id: true,
@@ -1135,8 +1201,8 @@ export const addTaskChecklistItemAction = createProtectedAction({
     const isTaskParticipant =
       task.assigneeId === ctx.userId ||
       task.reporterId === ctx.userId ||
-      task.project.ownerId === ctx.userId ||
-      task.project.members.length > 0;
+      task.project?.ownerId === ctx.userId ||
+      (task.project?.members.length ?? 0) > 0;
 
     if (!canManage && !isTaskParticipant) {
       throw new DomainError(
@@ -1283,7 +1349,7 @@ export const addTaskCommentAction = createProtectedAction({
       where: {
         id: input.taskId,
         deletedAt: null,
-        project: { deletedAt: null },
+        ...ACTIVE_OR_STANDALONE_PROJECT_WHERE,
       },
       select: {
         id: true,
@@ -1318,8 +1384,8 @@ export const addTaskCommentAction = createProtectedAction({
       task.assigneeId === ctx.userId ||
       task.reporterId === ctx.userId ||
       task.reviewerId === ctx.userId ||
-      task.project.ownerId === ctx.userId ||
-      task.project.members.length > 0;
+      task.project?.ownerId === ctx.userId ||
+      (task.project?.members.length ?? 0) > 0;
 
     if (!canViewAll && !isMemberOrParticipant) {
       throw new DomainError(
@@ -1442,7 +1508,7 @@ export const addTaskAttachmentAction = createProtectedAction({
       where: {
         id: input.taskId,
         deletedAt: null,
-        project: { deletedAt: null },
+        ...ACTIVE_OR_STANDALONE_PROJECT_WHERE,
       },
       select: {
         id: true,
@@ -1474,8 +1540,8 @@ export const addTaskAttachmentAction = createProtectedAction({
     const isParticipant =
       task.assigneeId === ctx.userId ||
       task.reporterId === ctx.userId ||
-      task.project.ownerId === ctx.userId ||
-      task.project.members.length > 0;
+      task.project?.ownerId === ctx.userId ||
+      (task.project?.members.length ?? 0) > 0;
 
     if (!canManage && !isParticipant) {
       throw new DomainError(
@@ -1638,7 +1704,7 @@ export const softDeleteTaskAction = createProtectedAction({
       };
     });
 
-    revalidateTaskRoutes(existing.projectId);
+    revalidateTaskRoutes(existing.projectId ?? undefined);
 
     return {
       data: { id: existing.id },

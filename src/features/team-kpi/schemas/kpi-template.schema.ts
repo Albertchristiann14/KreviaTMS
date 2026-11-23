@@ -97,6 +97,12 @@ export type ToggleKpiTemplateActiveInput = z.infer<
   typeof toggleKpiTemplateActiveSchema
 >;
 
+export const deleteKpiTemplateSchema = z.object({
+  templateId: z.string().uuid("ID template tidak valid."),
+});
+
+export type DeleteKpiTemplateInput = z.infer<typeof deleteKpiTemplateSchema>;
+
 export const assignKpiItemSchema = z.object({
   kpiTemplateId: z.string().uuid("ID template KPI tidak valid."),
   targetValue: z

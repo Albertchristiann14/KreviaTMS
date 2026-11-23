@@ -17,6 +17,7 @@ const BRIEF_INCLUDE = {
       code: true,
       name: true,
       colorHex: true,
+      deletedAt: true,
     },
   },
   contentItem: {
@@ -27,6 +28,7 @@ const BRIEF_INCLUDE = {
       contentFormat: true,
       status: true,
       plannedPublishAt: true,
+      deletedAt: true,
     },
   },
   requester: {
@@ -66,20 +68,26 @@ type BriefWithRelations = Prisma.DesignBriefGetPayload<{
 
 function serializeBrief(row: BriefWithRelations): DesignBriefDTO {
   const task = row.tasks[0] ?? null;
+  const activeProject =
+    row.project && row.project.deletedAt === null ? row.project : null;
+  const activeContent =
+    row.contentItem && row.contentItem.deletedAt === null
+      ? row.contentItem
+      : null;
 
   return {
     id: row.id,
     projectId: row.projectId,
-    projectCode: row.project.code,
-    projectName: row.project.name,
-    projectColorHex: row.project.colorHex,
-    contentItemId: row.contentItemId,
-    contentTitle: row.contentItem?.title ?? null,
-    contentPlatform: row.contentItem?.platform ?? null,
-    contentFormat: row.contentItem?.contentFormat ?? null,
-    contentStatus: row.contentItem?.status ?? null,
+    projectCode: activeProject?.code ?? "UMUM",
+    projectName: activeProject?.name ?? "Umum",
+    projectColorHex: activeProject?.colorHex ?? "#64748b",
+    contentItemId: activeContent?.id ?? null,
+    contentTitle: activeContent?.title ?? null,
+    contentPlatform: activeContent?.platform ?? null,
+    contentFormat: activeContent?.contentFormat ?? null,
+    contentStatus: activeContent?.status ?? null,
     contentPlannedPublishAt:
-      row.contentItem?.plannedPublishAt?.toISOString() ?? null,
+      activeContent?.plannedPublishAt?.toISOString() ?? null,
     title: row.title,
     objective: row.objective,
     dimensionsSpec: row.dimensionsSpec,

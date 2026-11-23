@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -15,6 +16,7 @@ import {
   Gauge,
   Layers,
   Loader2,
+  Pencil,
   Plus,
   Trash2,
   UserPlus,
@@ -48,7 +50,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { manageProjectMembersAction } from "@/features/tasks/actions/project.actions";
+import {
+  deleteProjectAction,
+  manageProjectMembersAction,
+} from "@/features/tasks/actions/project.actions";
+import { softDeleteTaskAction } from "@/features/tasks/actions/task.actions";
 import {
   getInitials,
   PROJECT_STATUS_META,
@@ -100,8 +106,11 @@ export interface ProjectDetailTabsProps {
   assignableUsers: AssigneeWorkloadOption[];
   currentUserId: string;
   canUpdateProject: boolean;
+  canDeleteProject?: boolean;
   canCreateTask: boolean;
   canAssignTask: boolean;
+  canEditTask?: boolean;
+  canDeleteTask?: boolean;
 }
 
 export function ProjectDetailTabs({
@@ -109,13 +118,24 @@ export function ProjectDetailTabs({
   assignableUsers,
   currentUserId,
   canUpdateProject,
+  canDeleteProject = false,
   canCreateTask,
   canAssignTask,
+  canEditTask = false,
+  canDeleteTask = false,
 }: ProjectDetailTabsProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const openDrawer = useUIStore((s) => s.openDrawer);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskBoardCardDto | null>(null);
+  const [deletingTask, setDeletingTask] = useState<TaskBoardCardDto | null>(
+    null
+  );
+  const [deletingTaskLoading, setDeletingTaskLoading] = useState(false);
   const [newMemberUserId, setNewMemberUserId] = useState("");
   const [newMemberRole, setNewMemberRole] = useState<
     "LEAD" | "MEMBER" | "VIEWER"
@@ -234,9 +254,97 @@ export function ProjectDetailTabs({
           );
         },
       }),
+      ...(canEditTask || canDeleteTask
+        ? [
+            columnHelper.display({
+              id: "actions",
+              header: "Aksi",
+              cell: (info) => {
+                const row = info.row.original;
+                return (
+                  <div
+                    className="flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {canEditTask ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Edit ${row.taskCode}`}
+                        onClick={() => setEditingTask(row)}
+                        className="size-7 rounded-lg text-slate-500 hover:bg-blue-50 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-blue-500/15 dark:hover:text-blue-400"
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    ) : null}
+                    {canDeleteTask ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Hapus ${row.taskCode}`}
+                        onClick={() => setDeletingTask(row)}
+                        className="size-7 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-500/15 dark:hover:text-rose-400"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    ) : null}
+                  </div>
+                );
+              },
+            }),
+          ]
+        : []),
     ],
-    []
+    [canEditTask, canDeleteTask]
   );
+
+  const handleConfirmDeleteProject = async () => {
+    setDeletingProject(true);
+    try {
+      const res = await deleteProjectAction({ projectId: project.id });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(
+        res.message ??
+          (res.data.detachedTaskCount
+            ? `Proyek ${project.code} dihapus. ${res.data.detachedTaskCount} task menjadi Tanpa Proyek (Umum).`
+            : `Proyek ${project.code} berhasil dihapus.`)
+      );
+      setDeleteProjectOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["kanban-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      router.push("/projects");
+      router.refresh();
+    } finally {
+      setDeletingProject(false);
+    }
+  };
+
+  const handleConfirmDeleteTask = async () => {
+    if (!deletingTask) return;
+    setDeletingTaskLoading(true);
+    try {
+      const res = await softDeleteTaskAction({ taskId: deletingTask.id });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(res.message ?? `Task ${deletingTask.taskCode} dihapus.`);
+      void queryClient.invalidateQueries({ queryKey: ["kanban-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["slide-over-detail", "TASK_DETAIL", deletingTask.id],
+      });
+      setDeletingTask(null);
+      router.refresh();
+    } finally {
+      setDeletingTaskLoading(false);
+    }
+  };
 
   const handleAddMember = async () => {
     if (!newMemberUserId) {
@@ -370,6 +478,19 @@ export function ProjectDetailTabs({
                 >
                   <Edit3 className="size-3.5" />
                   <span>Edit</span>
+                </Button>
+              ) : null}
+
+              {canDeleteProject ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDeleteProjectOpen(true)}
+                  className="h-9 gap-1.5 rounded-xl border-rose-200 bg-rose-50/80 px-3 text-xs font-semibold text-rose-700 shadow-2xs hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25"
+                >
+                  <Trash2 className="size-3.5" />
+                  <span>Hapus Proyek</span>
                 </Button>
               ) : null}
 
@@ -969,13 +1090,23 @@ export function ProjectDetailTabs({
           onOpenChange={setEditOpen}
           mode="edit"
           project={project}
+          canDelete={canDeleteProject}
+          onDeleted={() => {
+            router.push("/projects");
+            router.refresh();
+          }}
         />
       ) : null}
 
-      {canCreateTask ? (
+      {canCreateTask || canEditTask ? (
         <TaskCreateDialog
-          open={createTaskOpen}
-          onOpenChange={setCreateTaskOpen}
+          open={createTaskOpen || Boolean(editingTask)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCreateTaskOpen(false);
+              setEditingTask(null);
+            }
+          }}
           projects={[
             {
               id: project.id,
@@ -990,6 +1121,8 @@ export function ProjectDetailTabs({
           currentUserId={currentUserId}
           canAssignOthers={canAssignTask}
           defaultProjectId={project.id}
+          editTask={editingTask}
+          onUpdated={() => router.refresh()}
         />
       ) : null}
 
@@ -1004,6 +1137,30 @@ export function ProjectDetailTabs({
         variant="destructive"
         isLoading={memberMutationLoading}
         onConfirm={handleConfirmRemoveMember}
+      />
+
+      <ConfirmDialog
+        open={deleteProjectOpen}
+        onOpenChange={setDeleteProjectOpen}
+        title={`Hapus Proyek ${project.code}?`}
+        description={`Proyek "${project.name}" akan dihapus. Semua task di proyek ini tidak akan terhapus dan akan berubah menjadi task mandiri "Tanpa Proyek (Umum)".`}
+        confirmLabel="Ya, Hapus Proyek"
+        variant="destructive"
+        isLoading={deletingProject}
+        onConfirm={handleConfirmDeleteProject}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deletingTask)}
+        onOpenChange={(open) => {
+          if (!open) setDeletingTask(null);
+        }}
+        title={`Hapus Task ${deletingTask?.taskCode ?? ""}?`}
+        description={`Task "${deletingTask?.title ?? ""}" akan dihapus dari tampilan aktif.`}
+        confirmLabel="Hapus Task"
+        variant="destructive"
+        isLoading={deletingTaskLoading}
+        onConfirm={handleConfirmDeleteTask}
       />
     </div>
   );

@@ -28,21 +28,29 @@ export interface KanbanColumnProps {
   status: KanbanColumnStatus;
   tasks: TaskBoardCardDto[];
   canCreateHere?: boolean;
+  canEditTask?: boolean;
+  canDeleteTask?: boolean;
   onQuickCreate?: (status: "BACKLOG" | "TODO" | "IN_PROGRESS") => void;
   onOpenDetail: (taskId: string) => void;
   onQuickMoveStatus: (
     task: TaskBoardCardDto,
     targetStatus: KanbanColumnStatus
   ) => void;
+  onEditTask?: (task: TaskBoardCardDto) => void;
+  onDeleteTask?: (task: TaskBoardCardDto) => void;
 }
 
 export function KanbanColumn({
   status,
   tasks,
   canCreateHere = false,
+  canEditTask = false,
+  canDeleteTask = false,
   onQuickCreate,
   onOpenDetail,
   onQuickMoveStatus,
+  onEditTask,
+  onDeleteTask,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
@@ -129,6 +137,10 @@ export function KanbanColumn({
                 task={task}
                 onOpenDetail={onOpenDetail}
                 onQuickMoveStatus={onQuickMoveStatus}
+                canEdit={canEditTask}
+                canDelete={canDeleteTask}
+                onEdit={onEditTask}
+                onDelete={onDeleteTask}
               />
             ))
           )}

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   createProjectAction,
+  deleteProjectAction,
   updateProjectAction,
 } from "@/features/tasks/actions/project.actions";
 import {
@@ -63,7 +65,9 @@ export interface ProjectFormDialogProps {
   project?: ProjectSummaryDto | null;
   assignableUsers?: AssigneeWorkloadOption[];
   currentUserId?: string;
+  canDelete?: boolean;
   onSuccess?: () => void;
+  onDeleted?: () => void;
 }
 
 interface ProjectFormBodyProps {
@@ -71,8 +75,10 @@ interface ProjectFormBodyProps {
   project?: ProjectSummaryDto | null;
   assignableUsers: AssigneeWorkloadOption[];
   currentUserId?: string;
+  canDelete: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  onDeleted?: () => void;
 }
 
 function ProjectFormBody({
@@ -80,10 +86,13 @@ function ProjectFormBody({
   project,
   assignableUsers,
   currentUserId,
+  canDelete,
   onClose,
   onSuccess,
+  onDeleted,
 }: ProjectFormBodyProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const isEdit = mode === "edit" && Boolean(project);
 
   const [code, setCode] = useState(() => (isEdit && project ? project.code : ""));
@@ -105,8 +114,39 @@ function ProjectFormBody({
   );
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!project) return;
+    setFieldError(null);
+    setIsDeleting(true);
+    try {
+      const res = await deleteProjectAction({ projectId: project.id });
+      if (!res.success) {
+        setFieldError(res.error.message);
+        toast.error(res.error.message);
+        return;
+      }
+
+      toast.success(
+        res.message ??
+          (res.data.detachedTaskCount
+            ? `Proyek ${project.code} dihapus. ${res.data.detachedTaskCount} task menjadi Tanpa Proyek (Umum).`
+            : `Proyek ${project.code} berhasil dihapus.`)
+      );
+      setDeleteConfirmOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["kanban-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      onClose();
+      onDeleted?.();
+      router.refresh();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const toggleInitialMember = (userId: string) => {
     setSelectedMemberIds((prev) =>
@@ -366,11 +406,11 @@ function ProjectFormBody({
             type="button"
             variant="outline"
             onClick={onClose}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isDeleting}
           >
             Batal
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || isDeleting}>
             {isSubmitting ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
@@ -385,6 +425,33 @@ function ProjectFormBody({
         </DialogFooter>
       </form>
 
+      {isEdit && project && canDelete ? (
+        <div className="mt-2 rounded-xl border border-rose-200/90 bg-rose-50/70 p-4 dark:border-rose-500/30 dark:bg-rose-500/10">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-xs font-bold text-rose-800 dark:text-rose-300">
+                Danger Zone
+              </p>
+              <p className="text-xs text-rose-700/90 dark:text-rose-300/80">
+                Task pada proyek ini tetap disimpan sebagai task mandiri
+                &quot;Tanpa Proyek (Umum)&quot;.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={isSubmitting || isDeleting}
+              onClick={() => setDeleteConfirmOpen(true)}
+              className="shrink-0 gap-1.5"
+            >
+              <Trash2 className="size-3.5" />
+              <span>Hapus Proyek</span>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <ConfirmDialog
         open={archiveConfirmOpen}
         onOpenChange={setArchiveConfirmOpen}
@@ -397,6 +464,17 @@ function ProjectFormBody({
         isLoading={isSubmitting}
         onConfirm={() => executeSubmit(true)}
       />
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title={`Hapus Proyek ${project?.code ?? ""}?`}
+        description={`Proyek "${project?.name ?? ""}" akan dihapus. Semua task yang ada di proyek ini tidak akan terhapus dan akan berubah menjadi task mandiri "Tanpa Proyek (Umum)".`}
+        confirmLabel="Ya, Hapus Proyek"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   );
 }
@@ -408,7 +486,9 @@ export function ProjectFormDialog({
   project,
   assignableUsers = [],
   currentUserId,
+  canDelete = true,
   onSuccess,
+  onDeleted,
 }: ProjectFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -428,8 +508,10 @@ export function ProjectFormDialog({
             project={project}
             assignableUsers={assignableUsers}
             currentUserId={currentUserId}
+            canDelete={canDelete}
             onClose={() => onOpenChange(false)}
             onSuccess={onSuccess}
+            onDeleted={onDeleted}
           />
         ) : null}
       </DialogContent>

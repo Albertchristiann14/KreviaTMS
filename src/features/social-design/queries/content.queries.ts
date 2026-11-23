@@ -162,7 +162,9 @@ export async function getContentIdeas(params: {
     where,
     orderBy: [{ createdAt: "desc" }],
     include: {
-      project: { select: { code: true, name: true, colorHex: true } },
+      project: {
+        select: { code: true, name: true, colorHex: true, deletedAt: true },
+      },
       proposer: { select: { fullName: true, avatarUrl: true } },
       reviewer: { select: { fullName: true } },
       contentItems: {
@@ -173,32 +175,37 @@ export async function getContentIdeas(params: {
     },
   });
 
-  return rows.map((row) => ({
-    id: row.id,
-    projectId: row.projectId,
-    projectCode: row.project.code,
-    projectName: row.project.name,
-    projectColorHex: row.project.colorHex,
-    title: row.title,
-    description: row.description,
-    targetPlatform: row.targetPlatform,
-    contentPillar: row.contentPillar,
-    referenceUrls: parseJsonStringArray(row.referenceUrls),
-    status: row.status,
-    upvoteCount: row.upvotedByUserIds.length,
-    hasUpvoted: row.upvotedByUserIds.includes(params.currentUserId),
-    upvotedByUserIds: row.upvotedByUserIds,
-    proposedBy: row.proposedBy,
-    proposerName: row.proposer.fullName,
-    proposerAvatarUrl: row.proposer.avatarUrl,
-    reviewedBy: row.reviewedBy,
-    reviewerName: row.reviewer?.fullName ?? null,
-    reviewNotes: row.reviewNotes,
-    reviewedAt: row.reviewedAt?.toISOString() ?? null,
-    convertedContentItemId: row.contentItems[0]?.id ?? null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  }));
+  return rows.map((row) => {
+    const activeProject =
+      row.project && row.project.deletedAt === null ? row.project : null;
+
+    return {
+      id: row.id,
+      projectId: row.projectId,
+      projectCode: activeProject?.code ?? "UMUM",
+      projectName: activeProject?.name ?? "Umum",
+      projectColorHex: activeProject?.colorHex ?? "#64748b",
+      title: row.title,
+      description: row.description,
+      targetPlatform: row.targetPlatform,
+      contentPillar: row.contentPillar,
+      referenceUrls: parseJsonStringArray(row.referenceUrls),
+      status: row.status,
+      upvoteCount: row.upvotedByUserIds.length,
+      hasUpvoted: row.upvotedByUserIds.includes(params.currentUserId),
+      upvotedByUserIds: row.upvotedByUserIds,
+      proposedBy: row.proposedBy,
+      proposerName: row.proposer.fullName,
+      proposerAvatarUrl: row.proposer.avatarUrl,
+      reviewedBy: row.reviewedBy,
+      reviewerName: row.reviewer?.fullName ?? null,
+      reviewNotes: row.reviewNotes,
+      reviewedAt: row.reviewedAt?.toISOString() ?? null,
+      convertedContentItemId: row.contentItems[0]?.id ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  });
 }
 
 export async function getContentCalendarItems(params: {
@@ -233,8 +240,10 @@ export async function getContentCalendarItems(params: {
       { createdAt: "desc" },
     ],
     include: {
-      project: { select: { code: true, name: true, colorHex: true } },
-      idea: { select: { title: true } },
+      project: {
+        select: { code: true, name: true, colorHex: true, deletedAt: true },
+      },
+      idea: { select: { title: true, deletedAt: true } },
       creator: { select: { fullName: true, avatarUrl: true } },
       approver: { select: { fullName: true } },
       designBriefs: {
@@ -265,15 +274,19 @@ export async function getContentCalendarItems(params: {
   return rows.map((row) => {
     const brief = row.designBriefs[0] ?? null;
     const latestAnalytic = row.analytics[0] ?? null;
+    const activeProject =
+      row.project && row.project.deletedAt === null ? row.project : null;
+    const activeIdea =
+      row.idea && row.idea.deletedAt === null ? row.idea : null;
 
     return {
       id: row.id,
       projectId: row.projectId,
-      projectCode: row.project.code,
-      projectName: row.project.name,
-      projectColorHex: row.project.colorHex,
+      projectCode: activeProject?.code ?? "UMUM",
+      projectName: activeProject?.name ?? "Umum",
+      projectColorHex: activeProject?.colorHex ?? "#64748b",
       ideaId: row.ideaId,
-      ideaTitle: row.idea?.title ?? null,
+      ideaTitle: activeIdea?.title ?? null,
       title: row.title,
       platform: row.platform,
       contentFormat: row.contentFormat,
@@ -347,7 +360,7 @@ export async function getContentAnalyticsSummary(params?: {
     where,
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
     include: {
-      project: { select: { code: true, name: true } },
+      project: { select: { code: true, name: true, deletedAt: true } },
       creator: { select: { fullName: true } },
       analytics: {
         orderBy: [{ recordedDate: "desc" }, { createdAt: "desc" }],
@@ -360,6 +373,8 @@ export async function getContentAnalyticsSummary(params?: {
 
   const publishedContents: PublishedContentAnalyticItemDTO[] = rows.map((row) => {
     const snapshots = row.analytics.map(serializeAnalyticSnapshot);
+    const activeProject =
+      row.project && row.project.deletedAt === null ? row.project : null;
     return {
       id: row.id,
       title: row.title,
@@ -368,8 +383,8 @@ export async function getContentAnalyticsSummary(params?: {
       contentPillar: row.contentPillar,
       campaignName: row.campaignName,
       projectId: row.projectId,
-      projectCode: row.project.code,
-      projectName: row.project.name,
+      projectCode: activeProject?.code ?? "UMUM",
+      projectName: activeProject?.name ?? "Umum",
       creatorId: row.creatorId,
       creatorName: row.creator.fullName,
       publishedAt: row.publishedAt?.toISOString() ?? null,

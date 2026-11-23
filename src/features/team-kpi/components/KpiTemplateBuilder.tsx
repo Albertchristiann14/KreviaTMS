@@ -17,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +53,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   assignKpiMonthlyAction,
   clonePreviousMonthAssignmentsAction,
+  deleteKpiTemplateAction,
   toggleKpiTemplateActiveAction,
   upsertKpiTemplateAction,
 } from "@/features/team-kpi/actions/kpi-template.actions";
@@ -151,6 +153,7 @@ export function KpiTemplateBuilder({
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(
     DEFAULT_TEMPLATE_FORM
   );
+  const [deleteTarget, setDeleteTarget] = useState<KpiTemplateDTO | null>(null);
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
   const [memberSearch, setMemberSearch] = useState<string>("");
 
@@ -492,6 +495,24 @@ export function KpiTemplateBuilder({
       }
 
       toast.success(res.message ?? "Status template diperbarui.");
+      router.refresh();
+    });
+  };
+
+  const handleConfirmDeleteTemplate = () => {
+    if (!deleteTarget) return;
+    startTransition(async () => {
+      const res = await deleteKpiTemplateAction({
+        templateId: deleteTarget.id,
+      });
+
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+
+      toast.success(res.message ?? "Template KPI berhasil dihapus.");
+      setDeleteTarget(null);
       router.refresh();
     });
   };
@@ -1137,6 +1158,17 @@ export function KpiTemplateBuilder({
                                 >
                                   {tpl.isActive ? "Nonaktifkan" : "Aktifkan"}
                                 </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="xs"
+                                  disabled={isPending}
+                                  onClick={() => setDeleteTarget(tpl)}
+                                  className="gap-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <Trash2 className="size-3" />
+                                  <span>Hapus</span>
+                                </Button>
                               </div>
                             </TableCell>
                           ) : null}
@@ -1388,6 +1420,19 @@ export function KpiTemplateBuilder({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Hapus Template KPI?"
+        description={`Template ${deleteTarget?.code ?? ""} (${deleteTarget?.name ?? ""}) akan dinonaktifkan dan dihapus dari katalog aktif. Riwayat evaluasi sebelumnya tetap terjaga.`}
+        confirmLabel="Hapus Template"
+        variant="destructive"
+        isLoading={isPending}
+        onConfirm={handleConfirmDeleteTemplate}
+      />
     </div>
   );
 }

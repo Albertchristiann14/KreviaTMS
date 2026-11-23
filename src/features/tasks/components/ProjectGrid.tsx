@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { FolderKanban, Plus, RotateCcw, Search } from "lucide-react";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { deleteProjectAction } from "@/features/tasks/actions/project.actions";
 import {
   PROJECT_STATUS_META,
   ProjectCard,
@@ -30,6 +35,8 @@ export interface ProjectGridProps {
   assignableUsers: AssigneeWorkloadOption[];
   currentUserId: string;
   canCreateProject: boolean;
+  canUpdateProject?: boolean;
+  canDeleteProject?: boolean;
 }
 
 export function ProjectGrid({
@@ -37,9 +44,42 @@ export function ProjectGrid({
   assignableUsers,
   currentUserId,
   canCreateProject,
+  canUpdateProject = false,
+  canDeleteProject = false,
 }: ProjectGridProps) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const { filters, setFilters, resetFilters } = useProjectListFilters();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editProject, setEditProject] = useState<ProjectSummaryDto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectSummaryDto | null>(
+    null
+  );
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDeleteProject = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteProjectAction({ projectId: deleteTarget.id });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(
+        res.message ??
+          (res.data.detachedTaskCount
+            ? `Proyek ${deleteTarget.code} dihapus. ${res.data.detachedTaskCount} task menjadi Tanpa Proyek (Umum).`
+            : `Proyek ${deleteTarget.code} berhasil dihapus.`)
+      );
+      setDeleteTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["kanban-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      router.refresh();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const filteredProjects = useMemo(() => {
     const query = filters.q.trim().toLowerCase();
@@ -197,7 +237,14 @@ export function ProjectGrid({
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredProjects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+            <ProjectCard
+              key={project.id}
+              project={project}
+              canEdit={canUpdateProject}
+              canDelete={canDeleteProject}
+              onEdit={setEditProject}
+              onDelete={setDeleteTarget}
+            />
           ))}
         </div>
       )}
@@ -211,6 +258,34 @@ export function ProjectGrid({
           currentUserId={currentUserId}
         />
       ) : null}
+
+      {canUpdateProject ? (
+        <ProjectFormDialog
+          open={Boolean(editProject)}
+          onOpenChange={(open) => {
+            if (!open) setEditProject(null);
+          }}
+          mode="edit"
+          project={editProject}
+          assignableUsers={assignableUsers}
+          currentUserId={currentUserId}
+          canDelete={canDeleteProject}
+          onDeleted={() => setEditProject(null)}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={`Hapus Proyek ${deleteTarget?.code ?? ""}?`}
+        description={`Proyek "${deleteTarget?.name ?? ""}" akan dihapus. Semua task yang ada di proyek ini tidak akan terhapus dan akan menjadi task mandiri "Tanpa Proyek (Umum)".`}
+        confirmLabel="Ya, Hapus Proyek"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDeleteProject}
+      />
     </div>
   );
 }

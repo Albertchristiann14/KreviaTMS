@@ -22,7 +22,7 @@ export interface MidpointPositionResult {
 }
 
 export interface SpawnLinkedTaskInput {
-  projectId: string;
+  projectId: string | null;
   title: string;
   description?: string | null;
   taskType: TaskType;
@@ -71,7 +71,7 @@ export async function generateNextTaskCode(
  */
 export async function computeColumnEndPosition(
   tx: Prisma.TransactionClient,
-  projectId: string,
+  projectId: string | null,
   status: TaskStatus
 ): Promise<number> {
   const agg = await tx.task.aggregate({
@@ -131,7 +131,7 @@ export function computeMidpointPosition(
  */
 export async function reindexColumnPositions(
   tx: Prisma.TransactionClient,
-  projectId: string,
+  projectId: string | null,
   status: TaskStatus
 ): Promise<Map<string, number>> {
   const tasksInColumn = await tx.task.findMany({
@@ -167,7 +167,7 @@ export async function reindexColumnPositions(
 export async function resolveKanbanTargetPosition(
   tx: Prisma.TransactionClient,
   params: {
-    projectId: string;
+    projectId: string | null;
     status: TaskStatus;
     prevTaskId?: string | null;
     nextTaskId?: string | null;
@@ -304,7 +304,7 @@ export async function spawnLinkedTask(
   const createdTask = await tx.task.create({
     data: {
       taskCode,
-      projectId: input.projectId,
+      projectId: input.projectId ?? null,
       parentTaskId: input.parentTaskId ?? null,
       contentItemId: input.contentItemId ?? null,
       designBriefId: input.designBriefId ?? null,

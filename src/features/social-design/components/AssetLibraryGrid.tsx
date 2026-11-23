@@ -416,14 +416,27 @@ export function AssetLibraryGrid({
                   )}
                 </Button>
                 {canEditOrDelete ? (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => openEditModal(row)}
-                  >
-                    <Edit3 className="size-3" />
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => openEditModal(row)}
+                      title="Edit"
+                    >
+                      <Edit3 className="size-3" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setArchiveTarget(row)}
+                      title="Arsipkan"
+                    >
+                      <Archive className="size-3" />
+                    </Button>
+                  </>
                 ) : null}
               </div>
             );

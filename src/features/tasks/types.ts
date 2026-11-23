@@ -117,13 +117,13 @@ export interface ProjectSummaryDto {
 export interface TaskBoardCardDto {
   id: string;
   taskCode: string;
-  projectId: string;
+  projectId: string | null;
   project: {
     id: string;
     code: string;
     name: string;
     colorHex: string;
-  };
+  } | null;
   title: string;
   description: string | null;
   taskType: TaskType;
@@ -241,6 +241,10 @@ export interface TaskDetailPermissions {
 export interface TaskDetailApiResponse {
   task: TaskDetailDto;
   permissions: TaskDetailPermissions;
+  formOptions?: {
+    projects: ProjectLookupOption[];
+    assignees: AssigneeWorkloadOption[];
+  };
 }
 
 export interface KanbanBoardResponse {
@@ -284,7 +288,7 @@ export interface CalendarTaskDto {
     code: string;
     name: string;
     colorHex: string;
-  };
+  } | null;
   assignee: UserAvatarMiniDto | null;
   linkedContentItemId: string | null;
   linkedDesignBriefId: string | null;

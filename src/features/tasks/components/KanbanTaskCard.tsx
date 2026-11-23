@@ -13,7 +13,9 @@ import {
   MoreHorizontal,
   Palette,
   Paperclip,
+  Pencil,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,10 @@ export interface KanbanTaskCardProps {
     task: TaskBoardCardDto,
     targetStatus: KanbanColumnStatus
   ) => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  onEdit?: (task: TaskBoardCardDto) => void;
+  onDelete?: (task: TaskBoardCardDto) => void;
   isOverlay?: boolean;
 }
 
@@ -63,6 +69,10 @@ export function KanbanTaskCard({
   task,
   onOpenDetail,
   onQuickMoveStatus,
+  canEdit = false,
+  canDelete = false,
+  onEdit,
+  onDelete,
   isOverlay = false,
 }: KanbanTaskCardProps) {
   const {
@@ -125,14 +135,19 @@ export function KanbanTaskCard({
 
           <span
             className="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-            title={task.project.name}
+            title={task.project?.name ?? "Tanpa Proyek (Umum)"}
           >
             <span
               className="size-2 shrink-0 rounded-full"
-              style={{ backgroundColor: task.project.colorHex }}
+              style={{ backgroundColor: task.project?.colorHex ?? "#64748B" }}
             />
             <span className="truncate">{task.taskCode}</span>
           </span>
+          {!task.project ? (
+            <span className="inline-flex shrink-0 items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              Umum
+            </span>
+          ) : null}
         </div>
 
         <div
@@ -174,6 +189,24 @@ export function KanbanTaskCard({
                 <DropdownMenuItem onClick={() => onOpenDetail(task.id)}>
                   Buka Detail
                 </DropdownMenuItem>
+                {canEdit && onEdit ? (
+                  <DropdownMenuItem onClick={() => onEdit(task)}>
+                    <Pencil className="size-3.5" />
+                    <span>Edit Task</span>
+                  </DropdownMenuItem>
+                ) : null}
+                {canDelete && onDelete ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => onDelete(task)}
+                    >
+                      <Trash2 className="size-3.5" />
+                      <span>Hapus Task</span>
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}

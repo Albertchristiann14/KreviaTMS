@@ -1068,7 +1068,7 @@ export function EvaluationScoreForm({
                             {t.title}
                           </TableCell>
                           <TableCell className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
-                            {t.projectCode}
+                            {t.projectCode || "Tanpa Proyek"}
                           </TableCell>
                           <TableCell>
                             <StatusBadge domain="task" value={t.status} />

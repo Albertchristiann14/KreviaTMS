@@ -1,22 +1,26 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Calendar as CalendarIcon,
+  CalendarClock,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clock,
-  Edit2,
   List,
   Loader2,
   Megaphone,
+  Pencil,
   Plus,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PriorityBadge } from "@/components/shared/PriorityBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -39,7 +43,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { updateTaskAction } from "@/features/tasks/actions/task.actions";
+import {
+  softDeleteTaskAction,
+  updateTaskAction,
+} from "@/features/tasks/actions/task.actions";
 import { TaskCreateDialog } from "@/features/tasks/components/TaskCreateDialog";
 import { useWorkCalendarFilters } from "@/features/tasks/hooks/useTaskFilters";
 import type {
@@ -47,6 +54,8 @@ import type {
   CalendarContentOverlayDto,
   CalendarTaskDto,
   ProjectLookupOption,
+  TaskDetailApiResponse,
+  TaskDetailDto,
   WorkCalendarResponse,
 } from "@/features/tasks/types";
 import {
@@ -149,6 +158,8 @@ export interface WorkCalendarViewProps {
   assignees: AssigneeWorkloadOption[];
   currentUserId: string;
   canCreateTask: boolean;
+  canEditTask?: boolean;
+  canDeleteTask?: boolean;
   canEditDueDate: boolean;
   canAssignTask: boolean;
 }
@@ -160,9 +171,12 @@ export function WorkCalendarView({
   assignees,
   currentUserId,
   canCreateTask,
+  canEditTask = false,
+  canDeleteTask = false,
   canEditDueDate,
   canAssignTask,
 }: WorkCalendarViewProps) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const openDrawer = useUIStore((s) => s.openDrawer);
   const { filters, setFilters, resetFilters } =
@@ -170,6 +184,14 @@ export function WorkCalendarView({
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createDefaultDueDate, setCreateDefaultDueDate] = useState("");
+  const [editingTask, setEditingTask] = useState<TaskDetailDto | null>(null);
+  const [loadingEditTaskId, setLoadingEditTaskId] = useState<string | null>(
+    null
+  );
+  const [deletingTask, setDeletingTask] = useState<CalendarTaskDto | null>(
+    null
+  );
+  const [isDeleting, setIsDeleting] = useState(false);
   const [rescheduleTarget, setRescheduleTarget] =
     useState<CalendarTaskDto | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
@@ -315,6 +337,48 @@ export function WorkCalendarView({
       timeZone: "UTC",
     }).format(anchorDate);
   }, [anchorDate, filters.view, gridDays]);
+
+  const openEditTask = async (task: CalendarTaskDto) => {
+    setLoadingEditTaskId(task.id);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, { cache: "no-cache" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        toast.error(body.error ?? "Gagal memuat detail task untuk diedit.");
+        return;
+      }
+      const detail = (await res.json()) as TaskDetailApiResponse;
+      setEditingTask(detail.task);
+    } catch {
+      toast.error("Gagal memuat detail task.");
+    } finally {
+      setLoadingEditTaskId(null);
+    }
+  };
+
+  const handleConfirmDeleteTask = async () => {
+    if (!deletingTask) return;
+    setIsDeleting(true);
+    try {
+      const res = await softDeleteTaskAction({ taskId: deletingTask.id });
+      if (!res.success) {
+        toast.error(res.error.message);
+        return;
+      }
+      toast.success(res.message ?? `Task ${deletingTask.taskCode} dihapus.`);
+      void queryClient.invalidateQueries({ queryKey: ["tasks", "calendar"] });
+      void queryClient.invalidateQueries({ queryKey: ["kanban-board"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["slide-over-detail", "TASK_DETAIL", deletingTask.id],
+      });
+      setDeletingTask(null);
+      router.refresh();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const openReschedule = (task: CalendarTaskDto) => {
     setRescheduleTarget(task);
@@ -462,6 +526,7 @@ export function WorkCalendarView({
                 {(val: string | null) => {
                   const label = (() => {
                     if (!val || val === "ALL") return "Semua Proyek";
+                    if (val === "NONE") return "Tanpa Proyek (Umum)";
                     const p = projects.find((item) => item.id === val);
                     return p ? `${p.code} · ${p.name}` : "Proyek";
                   })();
@@ -471,6 +536,7 @@ export function WorkCalendarView({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Semua Proyek</SelectItem>
+              <SelectItem value="NONE">Tanpa Proyek (Umum)</SelectItem>
               {projects.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   <span className="truncate">
@@ -679,8 +745,14 @@ export function WorkCalendarView({
                                 <span className="truncate font-medium">
                                   {task.title}
                                 </span>
+                                <span className="hidden shrink-0 rounded border border-current/15 px-1.5 py-0.5 text-[10px] font-semibold opacity-80 sm:inline-flex">
+                                  {task.project?.code ?? "Tanpa Proyek"}
+                                </span>
                               </div>
-                              <div className="flex shrink-0 items-center gap-2">
+                              <div
+                                className="flex shrink-0 items-center gap-1.5"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <StatusBadge domain="task" value={task.status} />
                                 <PriorityBadge priority={task.priority} />
                                 {canEditDueDate ? (
@@ -688,13 +760,41 @@ export function WorkCalendarView({
                                     type="button"
                                     size="icon-xs"
                                     variant="ghost"
+                                    title="Ubah tenggat"
                                     aria-label={`Reschedule ${task.taskCode}`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openReschedule(task);
-                                    }}
+                                    onClick={() => openReschedule(task)}
                                   >
-                                    <Edit2 className="size-3" />
+                                    <CalendarClock className="size-3" />
+                                  </Button>
+                                ) : null}
+                                {canEditTask ? (
+                                  <Button
+                                    type="button"
+                                    size="icon-xs"
+                                    variant="ghost"
+                                    title="Edit task"
+                                    aria-label={`Edit ${task.taskCode}`}
+                                    disabled={loadingEditTaskId === task.id}
+                                    onClick={() => void openEditTask(task)}
+                                  >
+                                    {loadingEditTaskId === task.id ? (
+                                      <Loader2 className="size-3 animate-spin" />
+                                    ) : (
+                                      <Pencil className="size-3" />
+                                    )}
+                                  </Button>
+                                ) : null}
+                                {canDeleteTask ? (
+                                  <Button
+                                    type="button"
+                                    size="icon-xs"
+                                    variant="ghost"
+                                    title="Hapus task"
+                                    aria-label={`Hapus ${task.taskCode}`}
+                                    onClick={() => setDeletingTask(task)}
+                                    className="hover:text-rose-600"
+                                  >
+                                    <Trash2 className="size-3" />
                                   </Button>
                                 ) : null}
                               </div>
@@ -803,7 +903,7 @@ export function WorkCalendarView({
                                 ? "border-rose-500/30 bg-rose-500/10 text-rose-700 hover:bg-rose-500/15 dark:text-rose-300"
                                 : TASK_TYPE_CALENDAR_STYLE[task.taskType]
                             )}
-                            title={`${task.taskCode}: ${task.title}`}
+                            title={`${task.taskCode}: ${task.title} (${task.project?.name ?? "Tanpa Proyek (Umum)"})`}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1">
@@ -817,24 +917,55 @@ export function WorkCalendarView({
                               {filters.view === "week" ? (
                                 <p className="mt-0.5 truncate text-[10px] opacity-80">
                                   {task.taskCode} ·{" "}
+                                  {task.project?.code ?? "Umum"} ·{" "}
                                   {task.assignee?.fullName ?? "Unassigned"}
                                 </p>
                               ) : null}
                             </div>
 
-                            {canEditDueDate ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openReschedule(task);
-                                }}
-                                aria-label={`Ubah tanggal ${task.taskCode}`}
-                                className="shrink-0 rounded p-0.5 opacity-60 hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
-                              >
-                                <Edit2 className="size-2.5" />
-                              </button>
-                            ) : null}
+                            <div
+                              className="flex shrink-0 items-center gap-0.5"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {canEditDueDate ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openReschedule(task)}
+                                  aria-label={`Ubah tanggal ${task.taskCode}`}
+                                  title="Ubah tenggat"
+                                  className="shrink-0 rounded p-0.5 opacity-60 hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
+                                >
+                                  <CalendarClock className="size-2.5" />
+                                </button>
+                              ) : null}
+                              {canEditTask ? (
+                                <button
+                                  type="button"
+                                  disabled={loadingEditTaskId === task.id}
+                                  onClick={() => void openEditTask(task)}
+                                  aria-label={`Edit ${task.taskCode}`}
+                                  title="Edit task"
+                                  className="shrink-0 rounded p-0.5 opacity-60 hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
+                                >
+                                  {loadingEditTaskId === task.id ? (
+                                    <Loader2 className="size-2.5 animate-spin" />
+                                  ) : (
+                                    <Pencil className="size-2.5" />
+                                  )}
+                                </button>
+                              ) : null}
+                              {canDeleteTask ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingTask(task)}
+                                  aria-label={`Hapus ${task.taskCode}`}
+                                  title="Hapus task"
+                                  className="shrink-0 rounded p-0.5 opacity-60 hover:bg-rose-500/15 hover:text-rose-600 hover:opacity-100"
+                                >
+                                  <Trash2 className="size-2.5" />
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         ))}
 
@@ -899,22 +1030,54 @@ export function WorkCalendarView({
                   </p>
                   <div className="mt-2.5 flex items-center justify-between gap-2">
                     <span className="truncate text-[11px] text-muted-foreground">
+                      {task.project?.code ?? "Tanpa Proyek"} ·{" "}
                       {task.assignee?.fullName ?? "Unassigned"}
                     </span>
-                    {canEditDueDate ? (
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openReschedule(task);
-                        }}
-                        className="h-6 border-border/60 text-[11px]"
-                      >
-                        Atur
-                      </Button>
-                    ) : null}
+                    <div
+                      className="flex shrink-0 items-center gap-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {canEditDueDate ? (
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          onClick={() => openReschedule(task)}
+                          className="h-6 border-border/60 text-[11px]"
+                        >
+                          Atur
+                        </Button>
+                      ) : null}
+                      {canEditTask ? (
+                        <Button
+                          type="button"
+                          size="icon-xs"
+                          variant="ghost"
+                          aria-label={`Edit ${task.taskCode}`}
+                          disabled={loadingEditTaskId === task.id}
+                          onClick={() => void openEditTask(task)}
+                          className="size-6"
+                        >
+                          {loadingEditTaskId === task.id ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <Pencil className="size-3" />
+                          )}
+                        </Button>
+                      ) : null}
+                      {canDeleteTask ? (
+                        <Button
+                          type="button"
+                          size="icon-xs"
+                          variant="ghost"
+                          aria-label={`Hapus ${task.taskCode}`}
+                          onClick={() => setDeletingTask(task)}
+                          className="size-6 hover:text-rose-600"
+                        >
+                          <Trash2 className="size-3" />
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               ))
@@ -977,20 +1140,54 @@ export function WorkCalendarView({
         </DialogContent>
       </Dialog>
 
-      {canCreateTask ? (
+      {canCreateTask || canEditTask ? (
         <TaskCreateDialog
-          open={createDialogOpen}
-          onOpenChange={setCreateDialogOpen}
+          open={createDialogOpen || Boolean(editingTask)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCreateDialogOpen(false);
+              setEditingTask(null);
+            }
+          }}
           projects={projects}
           assignees={assignees}
           currentUserId={currentUserId}
           canAssignOthers={canAssignTask}
-          defaultDueDate={createDefaultDueDate}
-          onCreated={() =>
-            void queryClient.invalidateQueries({ queryKey: ["tasks", "calendar"] })
+          defaultProjectId={
+            filters.projectId !== "ALL" && filters.projectId !== "NONE"
+              ? filters.projectId
+              : undefined
           }
+          defaultDueDate={createDefaultDueDate}
+          editTask={editingTask}
+          onCreated={() => {
+            void queryClient.invalidateQueries({
+              queryKey: ["tasks", "calendar"],
+            });
+            router.refresh();
+          }}
+          onUpdated={() => {
+            void queryClient.invalidateQueries({
+              queryKey: ["tasks", "calendar"],
+            });
+            void queryClient.invalidateQueries({ queryKey: ["kanban-board"] });
+            router.refresh();
+          }}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(deletingTask)}
+        onOpenChange={(open) => {
+          if (!open) setDeletingTask(null);
+        }}
+        title={`Hapus Task ${deletingTask?.taskCode ?? ""}?`}
+        description={`Task "${deletingTask?.title ?? ""}" akan dihapus dari kalender dan tampilan aktif.`}
+        confirmLabel="Hapus Task"
+        variant="destructive"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDeleteTask}
+      />
     </div>
   );
 }

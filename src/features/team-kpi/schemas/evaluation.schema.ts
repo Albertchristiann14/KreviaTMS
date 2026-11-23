@@ -55,6 +55,14 @@ export type ResyncDraftEvaluationInput = z.infer<
   typeof resyncDraftEvaluationSchema
 >;
 
+export const deleteDraftEvaluationSchema = z.object({
+  evaluationId: z.string().uuid("ID evaluasi tidak valid."),
+});
+
+export type DeleteDraftEvaluationInput = z.infer<
+  typeof deleteDraftEvaluationSchema
+>;
+
 export const updateEvaluationItemScoreSchema = z.object({
   itemId: z.string().uuid("ID item evaluasi tidak valid."),
   manualScore: z

@@ -10,6 +10,7 @@ import type {
   ProjectSummaryDto,
 } from "@/features/tasks/types";
 import {
+  ACTIVE_OR_STANDALONE_PROJECT_WHERE,
   canViewAllProjects,
   createEmptyStatusBreakdown,
   mapTaskRowToBoardCardDto,
@@ -55,7 +56,7 @@ export async function getAssignableUsersWithWorkload(): Promise<
         deletedAt: null,
         assigneeId: { not: null },
         status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
-        project: { deletedAt: null },
+        ...ACTIVE_OR_STANDALONE_PROJECT_WHERE,
       },
       select: {
         assigneeId: true,
@@ -213,6 +214,7 @@ export async function getProjectsForUser(
   >();
 
   for (const t of taskStats) {
+    if (!t.projectId) continue;
     const agg = statsMap.get(t.projectId) ?? {
       total: 0,
       active: 0,

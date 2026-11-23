@@ -52,6 +52,11 @@ export default async function DesignReviewsPage({
     PERMISSIONS.DESIGN_SUBMISSION_APPROVE,
     ctx.roleCode
   );
+  const canDeleteBriefs = hasAnyPermission(
+    ctx.permissions,
+    [PERMISSIONS.DESIGN_BRIEF_MANAGE, PERMISSIONS.SOCIAL_CONTENT_DELETE],
+    ctx.roleCode
+  );
 
   return (
     <div className="space-y-5">
@@ -84,6 +89,7 @@ export default async function DesignReviewsPage({
         initialBriefs={briefs}
         currentUserId={ctx.userId}
         canApprove={canApprove}
+        canDeleteBriefs={canDeleteBriefs}
         initialBriefId={initialBriefId}
       />
     </div>

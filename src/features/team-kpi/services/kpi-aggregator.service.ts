@@ -263,7 +263,7 @@ interface RawTaskRow {
   id: string;
   taskCode: string;
   title: string;
-  projectId: string;
+  projectId: string | null;
   taskType: string;
   status: string;
   priority: string;
@@ -272,7 +272,22 @@ interface RawTaskRow {
   firstSubmittedAt: Date | null;
   completedAt: Date | null;
   revisionCount: number;
-  project: { name: string; code: string };
+  project: { name: string; code: string } | null;
+}
+
+function buildTaskProjectWhere(
+  projectId?: string | null
+): Prisma.TaskWhereInput {
+  const resolvedProjectId = sanitizeOptionalUuid(projectId);
+  if (resolvedProjectId) {
+    return {
+      projectId: resolvedProjectId,
+      project: { is: { deletedAt: null } },
+    };
+  }
+  return {
+    OR: [{ projectId: null }, { project: { is: { deletedAt: null } } }],
+  };
 }
 
 interface RawDesignBriefRow {
@@ -363,8 +378,8 @@ function aggregateMetricsFromRows(params: {
       taskCode: t.taskCode,
       title: t.title,
       projectId: t.projectId,
-      projectName: t.project.name,
-      projectCode: t.project.code,
+      projectName: t.project?.name ?? "Umum",
+      projectCode: t.project?.code ?? "Tanpa Proyek",
       taskType: t.taskType,
       status: t.status,
       priority: t.priority,
@@ -552,9 +567,11 @@ export async function computeUserMonthlyMetrics(
 ): Promise<UserMonthlyMetricsResult> {
   const db: DbClient = options?.tx ?? prisma;
   const window = getJakartaPeriodWindow(year, month);
-  const projectFilter = sanitizeOptionalUuid(options?.projectId)
-    ? { projectId: sanitizeOptionalUuid(options?.projectId) as string }
+  const resolvedProjectId = sanitizeOptionalUuid(options?.projectId);
+  const projectFilter = resolvedProjectId
+    ? { projectId: resolvedProjectId }
     : {};
+  const taskProjectWhere = buildTaskProjectWhere(resolvedProjectId);
 
   const [tasks, designBriefs, contentItems, cpvsTargetResolved] =
     await Promise.all([
@@ -563,12 +580,16 @@ export async function computeUserMonthlyMetrics(
           assigneeId: userId,
           deletedAt: null,
           status: { not: "CANCELLED" },
-          ...projectFilter,
-          OR: [
-            { dueDate: { gte: window.start, lt: window.end } },
+          AND: [
+            taskProjectWhere,
             {
-              dueDate: null,
-              completedAt: { gte: window.start, lt: window.end },
+              OR: [
+                { dueDate: { gte: window.start, lt: window.end } },
+                {
+                  dueDate: null,
+                  completedAt: { gte: window.start, lt: window.end },
+                },
+              ],
             },
           ],
         },
@@ -684,11 +705,16 @@ export async function getUserSixMonthTrend(
           assigneeId: userId,
           deletedAt: null,
           status: { not: "CANCELLED" },
-          OR: [
-            { dueDate: { gte: rangeStart, lt: rangeEnd } },
+          AND: [
+            buildTaskProjectWhere(null),
             {
-              dueDate: null,
-              completedAt: { gte: rangeStart, lt: rangeEnd },
+              OR: [
+                { dueDate: { gte: rangeStart, lt: rangeEnd } },
+                {
+                  dueDate: null,
+                  completedAt: { gte: rangeStart, lt: rangeEnd },
+                },
+              ],
             },
           ],
         },
@@ -1040,6 +1066,7 @@ export async function getTeamPerformanceOverview(filters: {
   }
 
   const projectWhere = projectId ? { projectId } : {};
+  const taskProjectWhere = buildTaskProjectWhere(projectId);
 
   const [
     scopedTasks,
@@ -1055,12 +1082,16 @@ export async function getTeamPerformanceOverview(filters: {
         assigneeId: { in: userIds },
         deletedAt: null,
         status: { not: "CANCELLED" },
-        ...projectWhere,
-        OR: [
-          { dueDate: { gte: trendStart, lt: trendEnd } },
+        AND: [
+          taskProjectWhere,
           {
-            dueDate: null,
-            completedAt: { gte: trendStart, lt: trendEnd },
+            OR: [
+              { dueDate: { gte: trendStart, lt: trendEnd } },
+              {
+                dueDate: null,
+                completedAt: { gte: trendStart, lt: trendEnd },
+              },
+            ],
           },
         ],
       },
@@ -1085,7 +1116,7 @@ export async function getTeamPerformanceOverview(filters: {
         assigneeId: { in: userIds },
         deletedAt: null,
         status: { in: ["TODO", "IN_PROGRESS", "IN_REVIEW", "REVISION"] },
-        ...projectWhere,
+        ...taskProjectWhere,
       },
       select: {
         id: true,

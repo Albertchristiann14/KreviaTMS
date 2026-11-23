@@ -15,11 +15,13 @@ import {
   type TaskDetailApiResponse,
 } from "@/features/tasks/types";
 import {
+  ACTIVE_OR_STANDALONE_PROJECT_WHERE,
   buildTaskScopeWhere,
   canViewAllTasks,
   mapTaskRowToBoardCardDto,
   TASK_BOARD_CARD_SELECT,
 } from "@/features/tasks/queries/task-mappers";
+import { getTaskFormOptions } from "@/features/tasks/queries/project.queries";
 import { computeDeadlineHealth, diffWibDays } from "@/features/tasks/utils/date-wib";
 
 const uuidSchema = z.string().uuid();
@@ -42,7 +44,12 @@ function applyCommonTaskFilters(
 ): Prisma.TaskWhereInput {
   const andConditions: Prisma.TaskWhereInput[] = [baseWhere];
 
-  if (filters?.projectId && uuidSchema.safeParse(filters.projectId).success) {
+  if (filters?.projectId === "NONE") {
+    andConditions.push({ projectId: null });
+  } else if (
+    filters?.projectId &&
+    uuidSchema.safeParse(filters.projectId).success
+  ) {
     andConditions.push({ projectId: filters.projectId });
   }
 
@@ -84,8 +91,8 @@ function applyCommonTaskFilters(
       OR: [
         { title: { contains: search, mode: "insensitive" } },
         { taskCode: { contains: search, mode: "insensitive" } },
-        { project: { name: { contains: search, mode: "insensitive" } } },
-        { project: { code: { contains: search, mode: "insensitive" } } },
+        { project: { is: { name: { contains: search, mode: "insensitive" } } } },
+        { project: { is: { code: { contains: search, mode: "insensitive" } } } },
       ],
     });
   }
@@ -114,7 +121,7 @@ export async function getMyTasksForUser(
   const baseWhere: Prisma.TaskWhereInput = {
     deletedAt: null,
     assigneeId: ctx.userId,
-    project: { deletedAt: null },
+    ...ACTIVE_OR_STANDALONE_PROJECT_WHERE,
   };
 
   // Hide CANCELLED unless explicitly requested in filter
@@ -323,6 +330,7 @@ export async function getWorkCalendarTasks(
             code: true,
             name: true,
             colorHex: true,
+            deletedAt: true,
           },
         },
         assignee: {
@@ -364,6 +372,7 @@ export async function getWorkCalendarTasks(
             code: true,
             name: true,
             colorHex: true,
+            deletedAt: true,
           },
         },
         assignee: {
@@ -375,7 +384,7 @@ export async function getWorkCalendarTasks(
         },
       },
     }),
-    filters.includeContentOverlay
+    filters.includeContentOverlay && filters.projectId !== "NONE"
       ? prisma.contentItem.findMany({
           where: {
             deletedAt: null,
@@ -420,6 +429,16 @@ export async function getWorkCalendarTasks(
       now
     );
 
+    const activeProject =
+      row.project && row.project.deletedAt === null
+        ? {
+            id: row.project.id,
+            code: row.project.code,
+            name: row.project.name,
+            colorHex: row.project.colorHex,
+          }
+        : null;
+
     return {
       id: row.id,
       taskCode: row.taskCode,
@@ -432,7 +451,7 @@ export async function getWorkCalendarTasks(
       dueDate: row.dueDate ? row.dueDate.toISOString() : null,
       isOverdue,
       deadlineHealth,
-      project: row.project,
+      project: activeProject,
       assignee: row.assignee,
       linkedContentItemId: row.contentItemId,
       linkedDesignBriefId: row.designBriefId,
@@ -479,7 +498,7 @@ export async function getTaskDetailById(
     where: {
       id: taskId,
       deletedAt: null,
-      project: { deletedAt: null },
+      ...ACTIVE_OR_STANDALONE_PROJECT_WHERE,
     },
     select: {
       ...TASK_BOARD_CARD_SELECT,
@@ -489,6 +508,7 @@ export async function getTaskDetailById(
           code: true,
           name: true,
           colorHex: true,
+          deletedAt: true,
           ownerId: true,
           members: {
             where: { userId: ctx.userId },
@@ -581,8 +601,8 @@ export async function getTaskDetailById(
     row.assignee?.id === ctx.userId ||
     row.reporter.id === ctx.userId ||
     row.reviewer?.id === ctx.userId ||
-    row.project.ownerId === ctx.userId ||
-    row.project.members.length > 0;
+    row.project?.ownerId === ctx.userId ||
+    (row.project?.members.length ?? 0) > 0;
 
   if (!canViewAllTasks(ctx) && !isMemberOrParticipant) {
     return null;
@@ -615,7 +635,10 @@ export async function getTaskDetailById(
     row.assignee?.id === ctx.userId || row.reporter.id === ctx.userId;
   const canEdit =
     canUpdateBase &&
-    (canAssign || canApprove || isAssigneeOrReporter || row.project.ownerId === ctx.userId);
+    (canAssign ||
+      canApprove ||
+      isAssigneeOrReporter ||
+      row.project?.ownerId === ctx.userId);
   const canEditDueDate =
     canUpdateBase &&
     (hasAnyPermission(
@@ -634,6 +657,7 @@ export async function getTaskDetailById(
     PERMISSIONS.TASKS_COMMENT_CREATE,
     ctx.roleCode
   );
+  const formOptions = canEdit ? await getTaskFormOptions(ctx) : undefined;
 
   return {
     task: {
@@ -707,5 +731,6 @@ export async function getTaskDetailById(
       canComment,
       canToggleChecklist: canEdit,
     },
+    ...(formOptions ? { formOptions } : {}),
   };
 }

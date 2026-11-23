@@ -160,6 +160,7 @@ export async function getOverviewDashboardData(
             code: true,
             name: true,
             colorHex: true,
+            deletedAt: true,
           },
         },
       },
@@ -216,7 +217,7 @@ export async function getOverviewDashboardData(
           select: { fullName: true },
         },
         project: {
-          select: { name: true },
+          select: { name: true, deletedAt: true },
         },
       },
     }),
@@ -254,7 +255,7 @@ export async function getOverviewDashboardData(
         dueDate: true,
         currentVersion: true,
         revisionCount: true,
-        project: { select: { name: true } },
+        project: { select: { name: true, deletedAt: true } },
         assignedDesigner: { select: { fullName: true } },
         requester: { select: { fullName: true } },
       },
@@ -364,7 +365,20 @@ export async function getOverviewDashboardData(
     taskType: t.taskType,
     dueDate: t.dueDate ? t.dueDate.toISOString() : null,
     isOverdue: Boolean(t.dueDate && t.dueDate.getTime() < now.getTime()),
-    project: t.project,
+    project:
+      t.project && !t.project.deletedAt
+        ? {
+            id: t.project.id,
+            code: t.project.code,
+            name: t.project.name,
+            colorHex: t.project.colorHex,
+          }
+        : {
+            id: "",
+            code: "UMUM",
+            name: "Tanpa Proyek",
+            colorHex: "#64748B",
+          },
   }));
 
   const activeProjects = activeProjectsRaw.map((p) => {
@@ -396,7 +410,8 @@ export async function getOverviewDashboardData(
       ? c.plannedPublishAt.toISOString()
       : null,
     creatorName: c.creator.fullName,
-    projectName: c.project.name,
+    projectName:
+      c.project && !c.project.deletedAt ? c.project.name : "Tanpa Proyek",
   }));
 
   const designQueue = designQueueRaw.map((d) => ({
@@ -406,7 +421,8 @@ export async function getOverviewDashboardData(
     dueDate: d.dueDate ? d.dueDate.toISOString() : null,
     currentVersion: d.currentVersion,
     revisionCount: d.revisionCount,
-    projectName: d.project.name,
+    projectName:
+      d.project && !d.project.deletedAt ? d.project.name : "Tanpa Proyek",
     designerName: d.assignedDesigner?.fullName ?? null,
     requesterName: d.requester.fullName,
   }));
