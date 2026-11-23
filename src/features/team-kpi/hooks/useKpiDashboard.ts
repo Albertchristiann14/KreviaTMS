@@ -52,7 +52,7 @@ export function useKpiDashboard(
 
       const res = await fetch(`/api/kpi/dashboard?${params.toString()}`, {
         method: "GET",
-        cache: "no-store",
+        cache: "no-cache",
       });
 
       if (!res.ok) {

@@ -189,7 +189,7 @@ export function ActivityLogsTable({
     queryKey: ["activity-logs", queryParams],
     queryFn: async () => {
       const res = await fetch(`/api/activity-logs?${queryParams}`, {
-        cache: "no-store",
+        cache: "no-cache",
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as {

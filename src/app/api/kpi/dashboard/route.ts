@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(overview, {
       status: 200,
       headers: {
-        "Cache-Control": "private, no-store",
+        "Cache-Control": "private, no-cache",
       },
     });
   } catch (err) {
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
         { error: { code: err.code, message: err.message } },
         {
           status,
-          headers: { "Cache-Control": "private, no-store" },
+          headers: { "Cache-Control": "private, no-cache" },
         }
       );
     }
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       },
       {
         status: 500,
-        headers: { "Cache-Control": "private, no-store" },
+        headers: { "Cache-Control": "private, no-cache" },
       }
     );
   }

@@ -10,7 +10,7 @@ import { DomainError } from "@/types/action-result";
 export const dynamic = "force-dynamic";
 
 const NO_STORE_HEADERS = {
-  "Cache-Control": "private, no-store",
+  "Cache-Control": "private, no-cache",
 } as const;
 
 const monthSchema = z

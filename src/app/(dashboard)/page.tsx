@@ -37,8 +37,6 @@ import { hasPermission, PERMISSIONS } from "@/lib/constants/permissions";
 import { getAuthContext } from "@/server/auth/rbac";
 import { prisma } from "@/server/db/prisma";
 
-export const dynamic = "force-dynamic";
-
 const ROLE_DISPLAY_NAMES: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
   PROJECT_MANAGER: "Project Manager",

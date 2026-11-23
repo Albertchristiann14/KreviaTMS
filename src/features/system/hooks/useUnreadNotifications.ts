@@ -25,7 +25,7 @@ export const UNREAD_NOTIFICATIONS_QUERY_KEY = [
 async function fetchUnreadNotifications(): Promise<UnreadNotificationsPayload> {
   const res = await fetch("/api/notifications/unread", {
     method: "GET",
-    cache: "no-store",
+    cache: "no-cache",
   });
 
   if (!res.ok) {

@@ -2,7 +2,7 @@ import { cache, Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopbar } from "@/components/layout/AppTopbar";
-import { GlobalSlideOverHost } from "@/components/layout/GlobalSlideOverHost";
+import { GlobalSlideOverHost } from "@/components/layout/GlobalSlideOverHostClient";
 import {
   PinnedAnnouncementBanner,
   type PinnedAnnouncementItem,
@@ -70,7 +70,9 @@ export default async function DashboardLayout({
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <PinnedAnnouncementBanner announcements={pinnedAnnouncements} />
+        {pinnedAnnouncements.length > 0 && (
+          <PinnedAnnouncementBanner announcements={pinnedAnnouncements} />
+        )}
         <AppTopbar
           user={{
             id: ctx.userId,

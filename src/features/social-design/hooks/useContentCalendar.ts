@@ -79,7 +79,7 @@ export function useContentCalendar({
       if (filters.creatorId !== "ALL") search.set("creatorId", filters.creatorId);
 
       const res = await fetch(`/api/content/calendar?${search.toString()}`, {
-        cache: "no-store",
+        cache: "no-cache",
       });
       if (!res.ok) {
         const errPayload = (await res.json().catch(() => ({}))) as {

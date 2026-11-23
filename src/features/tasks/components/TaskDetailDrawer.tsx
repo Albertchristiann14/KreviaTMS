@@ -110,7 +110,7 @@ export function TaskDetailContent({
     enabled: Boolean(taskId),
     staleTime: 10_000,
     queryFn: async () => {
-      const res = await fetch(`/api/tasks/${taskId}`, { cache: "no-store" });
+      const res = await fetch(`/api/tasks/${taskId}`, { cache: "no-cache" });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
           error?: string;
@@ -328,7 +328,7 @@ export function TaskDetailContent({
       `/api/uploads/download-url?storageKey=${encodeURIComponent(
         storageKey
       )}&download=1`,
-      { cache: "no-store" }
+      { cache: "no-cache" }
     );
     const body = (await res.json().catch(() => ({}))) as {
       downloadUrl?: string;

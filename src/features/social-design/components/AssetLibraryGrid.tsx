@@ -156,7 +156,7 @@ export function AssetLibraryGrid({
       sp.set("limit", "24");
 
       const res = await fetch(`/api/assets?${sp.toString()}`, {
-        cache: "no-store",
+        cache: "no-cache",
       });
       if (!res.ok) {
         throw new Error("Gagal memuat Asset Library.");

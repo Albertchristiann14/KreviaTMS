@@ -40,7 +40,7 @@ export async function fetchSignedDownloadUrl(
   if (forceDownload) params.set("download", "1");
 
   const res = await fetch(`/api/uploads/download-url?${params.toString()}`, {
-    cache: "no-store",
+    cache: "no-cache",
   });
   const payload = (await res.json()) as SignedDownloadApiResponse;
   if (!res.ok || !payload.downloadUrl) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useSyncExternalStore, useTransition } from "react";
+import { useCallback, useMemo, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { AlertTriangle, Check, Info, Megaphone, X } from "lucide-react";
 import { toast } from "sonner";
@@ -22,12 +22,15 @@ const STORAGE_KEY = "ktms:dismissed-pinned-announcements";
 const DISMISS_EVENT = "ktms:dismissed-announcements-changed";
 const SERVER_SNAPSHOT = "[]";
 
+let cachedRawSnapshot: string | null = null;
+let cachedResultSnapshot: string = SERVER_SNAPSHOT;
+
 function subscribeDismissedStore(callback: () => void): () => void {
   if (typeof window === "undefined") {
     return () => {};
   }
   const onChange = () => callback();
-  window.addEventListener("storage", onChange);
+  window.addEventListener("storage", onChange, { passive: true });
   window.addEventListener(DISMISS_EVENT, onChange);
   return () => {
     window.removeEventListener("storage", onChange);
@@ -36,8 +39,14 @@ function subscribeDismissedStore(callback: () => void): () => void {
 }
 
 function getDismissedSnapshot(): string {
+  if (typeof window === "undefined") return SERVER_SNAPSHOT;
   try {
-    return window.sessionStorage.getItem(STORAGE_KEY) ?? SERVER_SNAPSHOT;
+    const raw = window.sessionStorage.getItem(STORAGE_KEY) ?? SERVER_SNAPSHOT;
+    if (raw !== cachedRawSnapshot) {
+      cachedRawSnapshot = raw;
+      cachedResultSnapshot = raw;
+    }
+    return cachedResultSnapshot;
   } catch {
     return SERVER_SNAPSHOT;
   }
@@ -59,7 +68,7 @@ const PRIORITY_STYLES: Record<
       "border-rose-200 bg-rose-50 text-rose-950 dark:border-rose-500/30 dark:bg-rose-950/40 dark:text-rose-100",
     badge:
       "border border-rose-300 bg-rose-100 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/20 dark:text-rose-200",
-    dot: "bg-rose-600 dark:bg-rose-400 animate-pulse",
+    dot: "bg-rose-600 dark:bg-rose-400 motion-safe:animate-pulse",
     desc: "text-rose-800 dark:text-rose-200",
     action:
       "border border-rose-200 bg-white/90 text-rose-800 hover:bg-white dark:border-rose-500/30 dark:bg-slate-900/70 dark:text-rose-200 dark:hover:bg-slate-900",
@@ -89,7 +98,7 @@ const PRIORITY_STYLES: Record<
   },
 };
 
-export function PinnedAnnouncementBanner({
+function PinnedAnnouncementBannerInner({
   announcements,
 }: PinnedAnnouncementBannerProps) {
   const [, startTransition] = useTransition();
@@ -99,15 +108,17 @@ export function PinnedAnnouncementBanner({
     () => SERVER_SNAPSHOT
   );
 
-  let dismissedIds: string[] = [];
-  try {
-    const parsed = JSON.parse(rawDismissed) as unknown;
-    if (Array.isArray(parsed)) {
-      dismissedIds = parsed.filter((v): v is string => typeof v === "string");
+  const dismissedIds = useMemo(() => {
+    try {
+      const parsed = JSON.parse(rawDismissed) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((v): v is string => typeof v === "string");
+      }
+    } catch {
+      // Ignore parse errors
     }
-  } catch {
-    dismissedIds = [];
-  }
+    return [];
+  }, [rawDismissed]);
 
   const handleAcknowledgeAndDismiss = useCallback(
     (item: PinnedAnnouncementItem) => {
@@ -121,6 +132,7 @@ export function PinnedAnnouncementBanner({
         const next = current.includes(item.id)
           ? current
           : [...current, item.id];
+        cachedRawSnapshot = null;
         window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
         window.dispatchEvent(new Event(DISMISS_EVENT));
       } catch {
@@ -139,16 +151,21 @@ export function PinnedAnnouncementBanner({
     []
   );
 
-  const visibleItems = announcements
-    .filter((item) => !dismissedIds.includes(item.id))
-    .slice(0, 3);
+  const visibleItems = useMemo(() => {
+    return announcements
+      .filter((item) => !dismissedIds.includes(item.id))
+      .slice(0, 3);
+  }, [announcements, dismissedIds]);
 
   if (visibleItems.length === 0) {
     return null;
   }
 
   return (
-    <div className="flex flex-col gap-1.5 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
+    <div
+      style={{ contain: "layout paint" }}
+      className="flex flex-col gap-1.5 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900 lg:px-6"
+    >
       {visibleItems.map((item) => {
         const style = PRIORITY_STYLES[item.priority] ?? PRIORITY_STYLES.INFO!;
         const Icon = style.icon;
@@ -216,4 +233,14 @@ export function PinnedAnnouncementBanner({
       })}
     </div>
   );
+}
+
+export function PinnedAnnouncementBanner({
+  announcements,
+}: PinnedAnnouncementBannerProps) {
+  if (!announcements || announcements.length === 0) {
+    return null;
+  }
+
+  return <PinnedAnnouncementBannerInner announcements={announcements} />;
 }

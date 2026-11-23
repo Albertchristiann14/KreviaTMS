@@ -125,7 +125,7 @@ export function useKanbanBoard(
     queryFn: async () => {
       const qs = buildBoardQueryString(filters);
       const url = qs ? `/api/tasks/board?${qs}` : "/api/tasks/board";
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { cache: "no-cache" });
       if (!res.ok) {
         const errBody = (await res.json().catch(() => ({}))) as {
           error?: string;

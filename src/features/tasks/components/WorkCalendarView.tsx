@@ -240,7 +240,7 @@ export function WorkCalendarView({
       if (filters.taskType !== "ALL") params.set("taskType", filters.taskType);
 
       const res = await fetch(`/api/tasks/calendar?${params.toString()}`, {
-        cache: "no-store",
+        cache: "no-cache",
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {

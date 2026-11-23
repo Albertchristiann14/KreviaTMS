@@ -67,6 +67,11 @@ const nextConfig: NextConfig = {
       "date-fns",
       "@tanstack/react-table",
       "@tanstack/react-query",
+      "recharts",
+      "nuqs",
+      "@base-ui/react",
+      "@dnd-kit/core",
+      "@dnd-kit/sortable",
     ],
     serverActions: {
       bodySizeLimit: "2mb",

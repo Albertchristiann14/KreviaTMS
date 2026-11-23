@@ -62,7 +62,7 @@ export async function HEAD() {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Cache-Control": "private, no-store",
+        "Cache-Control": "private, no-cache",
       },
     });
   } catch (err) {
@@ -75,12 +75,12 @@ export async function HEAD() {
             : 400;
       return new Response(null, {
         status,
-        headers: { "Cache-Control": "private, no-store" },
+        headers: { "Cache-Control": "private, no-cache" },
       });
     }
     return new Response(null, {
       status: 500,
-      headers: { "Cache-Control": "private, no-store" },
+      headers: { "Cache-Control": "private, no-cache" },
     });
   }
 }
@@ -509,7 +509,7 @@ export async function GET(request: NextRequest) {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="${filename}"`,
-        "Cache-Control": "private, no-store",
+        "Cache-Control": "private, no-cache",
       },
     });
   } catch (err) {
@@ -526,7 +526,7 @@ export async function GET(request: NextRequest) {
         { error: { code: err.code, message: err.message } },
         {
           status,
-          headers: { "Cache-Control": "private, no-store" },
+          headers: { "Cache-Control": "private, no-cache" },
         }
       );
     }
@@ -541,7 +541,7 @@ export async function GET(request: NextRequest) {
       },
       {
         status: 500,
-        headers: { "Cache-Control": "private, no-store" },
+        headers: { "Cache-Control": "private, no-cache" },
       }
     );
   }

@@ -138,7 +138,7 @@ export function ReportExportToolbar({
     try {
       const res = await fetch(buildExportUrl(scope), {
         method: "GET",
-        cache: "no-store",
+        cache: "no-cache",
       });
 
       if (!res.ok) {

@@ -222,7 +222,7 @@ export function GlobalSlideOverHost() {
     queryFn: async () => {
       if (!activeDrawer || activeDrawer.type !== "TASK_DETAIL") return null;
       const res = await fetch(`/api/tasks/${activeDrawer.id}`, {
-        cache: "no-store",
+        cache: "no-cache",
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as {
@@ -402,7 +402,7 @@ export function GlobalSlideOverHost() {
     try {
       const res = await fetch(
         `/api/uploads/download-url?storageKey=${encodeURIComponent(att.storageKey)}&download=1`,
-        { cache: "no-store" }
+        { cache: "no-cache" }
       );
       const data = (await res.json()) as {
         downloadUrl?: string;
