@@ -9,6 +9,13 @@ on:
 jobs:
   lint-typecheck-build:
     runs-on: ubuntu-latest
+    env:
+      SKIP_ENV_VALIDATION: "1"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
+      DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
+      AUTH_SECRET: "ci-build-only-placeholder-secret-32-chars"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,10 +43,3 @@ jobs:
 
       - name: Build Next.js Application
         run: npm run build
-        env:
-          SKIP_ENV_VALIDATION: "1"
-          NEXT_PUBLIC_APP_URL: "http://localhost:3000"
-          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
-          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
-          DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
-          AUTH_SECRET: "ci-build-only-placeholder-secret-32-chars"
