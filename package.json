@@ -13,10 +13,12 @@
     "seed": "tsx prisma/seed.ts"
   },
   "browserslist": [
-    "defaults and fully supports es6-module",
-    "> 0.5%",
-    "not dead",
-    "not IE 11"
+    "chrome >= 100",
+    "edge >= 100",
+    "firefox >= 100",
+    "safari >= 15.4",
+    "ios_saf >= 15.4",
+    "and_chr >= 100"
   ],
   "dependencies": {
     "@base-ui/react": "^1.9.0",

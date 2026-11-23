@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -32,9 +33,13 @@ import {
   AvatarGroupCount,
   AvatarImage,
 } from "@/components/ui/avatar";
-import { getOverviewDashboardData } from "@/features/system/queries/dashboard.queries";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  getOverviewDashboardData,
+  getUnreadNotificationCount,
+} from "@/features/system/queries/dashboard.queries";
 import { hasPermission, PERMISSIONS } from "@/lib/constants/permissions";
-import { getAuthContext } from "@/server/auth/rbac";
+import { getAuthContext, type AuthContext } from "@/server/auth/rbac";
 import { prisma } from "@/server/db/prisma";
 
 const ROLE_DISPLAY_NAMES: Record<string, string> = {
@@ -163,20 +168,140 @@ const ANNOUNCEMENT_PRIORITY_STYLE: Record<string, string> = {
   INFO: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300",
 };
 
+function DashboardBodySkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, idx) => (
+          <Skeleton key={idx} className="h-[154px] w-full rounded-xl" />
+        ))}
+      </div>
+      <div className="grid gap-6 xl:grid-cols-12">
+        <div className="space-y-6 xl:col-span-8">
+          <Skeleton className="h-80 w-full rounded-xl" />
+          <Skeleton className="h-72 w-full rounded-xl" />
+        </div>
+        <div className="space-y-6 xl:col-span-4">
+          <Skeleton className="h-72 w-full rounded-xl" />
+          <Skeleton className="h-64 w-full rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default async function OverviewDashboardPage() {
   const ctx = await getAuthContext();
   if (!ctx) {
     redirect("/login");
   }
 
+  const unreadNotificationCount = await getUnreadNotificationCount(ctx.userId);
   const now = new Date();
-  const isLeaderOrPm =
-    ctx.roleCode === "SUPER_ADMIN" || ctx.roleCode === "PROJECT_MANAGER";
   const canCreateTask = hasPermission(
     ctx.permissions,
     PERMISSIONS.TASKS_ITEM_CREATE,
     ctx.roleCode
   );
+  const greeting = getJakartaGreeting(now);
+  const liveDate = formatLiveDate(now);
+  const currentUserInitials = getInitials(ctx.fullName);
+
+  return (
+    <div className="space-y-6">
+      {/* 1. HERO GREETING BANNER — renders immediately on first flush for instant LCP */}
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-20 -right-12 size-64 rounded-full bg-gradient-to-br from-blue-500/10 via-indigo-500/8 to-transparent blur-3xl dark:from-blue-500/20"
+        />
+
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <Avatar
+              size="lg"
+              className="size-12 shrink-0 ring-2 ring-blue-100 dark:ring-blue-500/30"
+            >
+              {ctx.avatarUrl ? (
+                <AvatarImage src={ctx.avatarUrl} alt={ctx.fullName} />
+              ) : null}
+              <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-sm font-bold text-white">
+                {currentUserInitials}
+              </AvatarFallback>
+              <AvatarBadge className="bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
+            </Avatar>
+
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="truncate text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                  {greeting}, {ctx.fullName}
+                </h1>
+                <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300">
+                  {ROLE_DISPLAY_NAMES[ctx.roleCode] ?? ctx.roleCode}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 text-sm font-medium text-slate-600 dark:text-slate-300">
+                <span className="truncate">
+                  {ctx.jobTitle} · {ctx.department}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <span className="size-1.5 rounded-full bg-emerald-500" />
+                  <span>{liveDate}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Link
+              href="/notifications"
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              <Bell className="size-3.5 text-blue-600 dark:text-blue-400" />
+              <span>Notifications</span>
+              {unreadNotificationCount > 0 ? (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 font-mono text-[10px] font-bold text-white">
+                  {unreadNotificationCount}
+                </span>
+              ) : null}
+            </Link>
+
+            <Link
+              href="/tasks/board"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              <Columns3 className="size-3.5 text-slate-500 dark:text-slate-400" />
+              <span>Kanban</span>
+            </Link>
+
+            {canCreateTask ? (
+              <Link
+                href="/tasks/board"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-4 text-xs font-semibold text-white shadow-sm shadow-blue-600/20 transition-all hover:-translate-y-0.5 hover:bg-blue-700"
+              >
+                <Plus className="size-3.5" />
+                <span>New Task</span>
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <Suspense fallback={<DashboardBodySkeleton />}>
+        <OverviewDashboardBody ctx={ctx} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function OverviewDashboardBody({ ctx }: { ctx: AuthContext }) {
+  const isLeaderOrPm =
+    ctx.roleCode === "SUPER_ADMIN" || ctx.roleCode === "PROJECT_MANAGER";
 
   const [data, projectRows] = await Promise.all([
     getOverviewDashboardData(ctx),
@@ -246,8 +371,6 @@ export default async function OverviewDashboardPage() {
     });
   }
 
-  const greeting = getJakartaGreeting(now);
-  const liveDate = formatLiveDate(now);
   const currentUserInitials = getInitials(ctx.fullName);
 
   // Summary metrics & ratios
@@ -343,89 +466,6 @@ export default async function OverviewDashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* 1. HERO GREETING BANNER */}
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-20 -right-12 size-64 rounded-full bg-gradient-to-br from-blue-500/10 via-indigo-500/8 to-transparent blur-3xl dark:from-blue-500/20"
-        />
-
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-            <Avatar
-              size="lg"
-              className="size-12 shrink-0 ring-2 ring-blue-100 dark:ring-blue-500/30"
-            >
-              {ctx.avatarUrl ? (
-                <AvatarImage src={ctx.avatarUrl} alt={ctx.fullName} />
-              ) : null}
-              <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-sm font-bold text-white">
-                {currentUserInitials}
-              </AvatarFallback>
-              <AvatarBadge className="bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
-            </Avatar>
-
-            <div className="min-w-0 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="truncate text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                  {greeting}, {ctx.fullName}
-                </h1>
-                <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300">
-                  {ROLE_DISPLAY_NAMES[ctx.roleCode] ?? ctx.roleCode}
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2.5 text-sm font-medium text-slate-600 dark:text-slate-300">
-                <span className="truncate">
-                  {ctx.jobTitle} · {ctx.department}
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                  <span className="size-1.5 rounded-full bg-emerald-500" />
-                  <span>{liveDate}</span>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Link
-              href="/notifications"
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            >
-              <Bell className="size-3.5 text-blue-600 dark:text-blue-400" />
-              <span>Notifications</span>
-              {data.unreadNotificationCount > 0 ? (
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 font-mono text-[10px] font-bold text-white">
-                  {data.unreadNotificationCount}
-                </span>
-              ) : null}
-            </Link>
-
-            <Link
-              href="/tasks/board"
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            >
-              <Columns3 className="size-3.5 text-slate-500 dark:text-slate-400" />
-              <span>Kanban</span>
-            </Link>
-
-            {canCreateTask ? (
-              <Link
-                href="/tasks/board"
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-4 text-xs font-semibold text-white shadow-sm shadow-blue-600/20 transition-all hover:-translate-y-0.5 hover:bg-blue-700"
-              >
-                <Plus className="size-3.5" />
-                <span>New Task</span>
-              </Link>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
       {/* 2. METRICS STAT CARDS (4 CARDS) */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {/* Active Tasks */}

@@ -27,6 +27,7 @@ export const metadata: Metadata = {
     template: "%s | Krevia TMS",
   },
   applicationName: "Krevia TMS",
+  manifest: "/manifest.webmanifest",
   description:
     "Krevia Team Management System — Unified Tasks, Team & KPI Evaluation, Social Media & Design Operations",
   robots: {

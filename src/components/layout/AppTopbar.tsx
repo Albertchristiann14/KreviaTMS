@@ -63,6 +63,7 @@ const ROLE_NAME_MAP: Record<string, string> = {
 export interface AppTopbarProps {
   user: AppTopbarUser;
   permissions: readonly string[];
+  initialUnreadCount?: number;
 }
 
 function getInitials(name: string): string {
@@ -140,14 +141,18 @@ function buildBreadcrumbs(
   return crumbs;
 }
 
-export function AppTopbar({ user, permissions }: AppTopbarProps) {
+export function AppTopbar({
+  user,
+  permissions,
+  initialUnreadCount = 0,
+}: AppTopbarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const setMobileSidebarOpen = useUIStore((s) => s.setMobileSidebarOpen);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  const { data: unreadData } = useUnreadNotifications();
-  const unreadCount = unreadData?.unreadCount ?? 0;
+  const { data: unreadData } = useUnreadNotifications(false);
+  const unreadCount = unreadData?.unreadCount ?? initialUnreadCount;
 
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandSearch, setCommandSearch] = useState("");
@@ -384,7 +389,7 @@ export function AppTopbar({ user, permissions }: AppTopbarProps) {
                 className="pointer-events-none absolute -top-0.5 -right-0.5 size-3 animate-ping rounded-full bg-blue-500/45"
               />
             ) : null}
-            <NotificationBellPopover />
+            <NotificationBellPopover initialUnreadCount={initialUnreadCount} />
           </div>
 
           <DropdownMenu>

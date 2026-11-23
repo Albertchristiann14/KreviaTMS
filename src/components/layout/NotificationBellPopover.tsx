@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -38,12 +39,17 @@ function formatRelativeTime(isoDate: string): string {
   return `${diffDay} hari lalu`;
 }
 
-export function NotificationBellPopover() {
+export function NotificationBellPopover({
+  initialUnreadCount = 0,
+}: {
+  initialUnreadCount?: number;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data, isLoading } = useUnreadNotifications();
+  const [open, setOpen] = useState(false);
+  const { data, isLoading } = useUnreadNotifications(open);
 
-  const unreadCount = data?.unreadCount ?? 0;
+  const unreadCount = data?.unreadCount ?? initialUnreadCount;
   const items = data?.items ?? [];
 
   const markOneMutation = useMutation({
@@ -86,7 +92,7 @@ export function NotificationBellPopover() {
   });
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
           <Button

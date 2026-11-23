@@ -7,6 +7,7 @@ import {
   PinnedAnnouncementBanner,
   type PinnedAnnouncementItem,
 } from "@/components/layout/PinnedAnnouncementBanner";
+import { getUnreadNotificationCount } from "@/features/system/queries/dashboard.queries";
 import { getAuthContext } from "@/server/auth/rbac";
 import { prisma } from "@/server/db/prisma";
 
@@ -55,7 +56,10 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const pinnedAnnouncements = await getPinnedAnnouncements(ctx.roleId);
+  const [pinnedAnnouncements, initialUnreadCount] = await Promise.all([
+    getPinnedAnnouncements(ctx.roleId),
+    getUnreadNotificationCount(ctx.userId),
+  ]);
   const permissions = Array.from(ctx.permissions);
 
   return (
@@ -82,6 +86,7 @@ export default async function DashboardLayout({
             avatarUrl: ctx.avatarUrl,
           }}
           permissions={permissions}
+          initialUnreadCount={initialUnreadCount}
         />
         <main className="flex-1 p-4 lg:p-6">{children}</main>
       </div>

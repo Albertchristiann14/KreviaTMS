@@ -1,3 +1,4 @@
+import { cache } from "react";
 import {
   ContentStatus,
   DesignSubmissionStatus,
@@ -39,6 +40,21 @@ function mapNotificationTypeToModule(type: NotificationType): AuditModule {
   }
   return "SYSTEM";
 }
+
+export const getUnreadNotificationCount = cache(
+  async (userId: string): Promise<number> => {
+    try {
+      return await prisma.notification.count({
+        where: {
+          recipientId: userId,
+          isRead: false,
+        },
+      });
+    } catch {
+      return 0;
+    }
+  }
+);
 
 export async function getNotificationsForUser(userId: string): Promise<{
   items: NotificationFeedItemDTO[];
